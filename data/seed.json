@@ -1,0 +1,247 @@
+{
+  "business": {
+    "name": "CONIC",
+    "currency": "INR",
+    "dateFormat": "DD-MMM-YYYY"
+  },
+  "settings": {
+    "openingOnlineBalance": 0.0,
+    "openingCashBalance": 0.0,
+    "vendors": [
+      "RawDawg",
+      "Fetch",
+      "Nord",
+      "Belucci",
+      "FoolHardy",
+      "Core",
+      "Dexer",
+      "Nordich",
+      "Never",
+      "Ozaro"
+    ],
+    "expenseCategories": [
+      "Police",
+      "Shop",
+      "Transport",
+      "Other"
+    ]
+  },
+  "dailyEntries": [
+    {
+      "date": "2026-09-06",
+      "onlineSales": 25458.0,
+      "cashSales": 500.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 48.0,
+        "Transport": 0.0,
+        "Other": 0.0
+      },
+      "expensePaidOnline": 848.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-07",
+      "onlineSales": 10490.0,
+      "cashSales": 500.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 48.0,
+        "Transport": 0.0,
+        "Other": 0.0
+      },
+      "expensePaidOnline": 848.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-08",
+      "onlineSales": 4359.0,
+      "cashSales": 3500.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 501.0,
+        "Transport": 0.0,
+        "Other": 498.0
+      },
+      "expensePaidOnline": 1799.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-09",
+      "onlineSales": 12138.0,
+      "cashSales": 500.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 48.0,
+        "Transport": 0.0,
+        "Other": 0.0
+      },
+      "expensePaidOnline": 848.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-10",
+      "onlineSales": 18992.0,
+      "cashSales": 220.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 48.0,
+        "Transport": 2000.0,
+        "Other": 0.0
+      },
+      "expensePaidOnline": 2848.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-11",
+      "onlineSales": 14899.0,
+      "cashSales": 2950.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 48.0,
+        "Transport": 0.0,
+        "Other": 1586.0
+      },
+      "expensePaidOnline": 2434.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-12",
+      "onlineSales": 33395.0,
+      "cashSales": 1000.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 52.0,
+        "Transport": 0.0,
+        "Other": 0.0
+      },
+      "expensePaidOnline": 852.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-13",
+      "onlineSales": 21809.0,
+      "cashSales": 0.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 0.0,
+        "Transport": 0.0,
+        "Other": 0.0
+      },
+      "expensePaidOnline": 800.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-18",
+      "onlineSales": 9420.0,
+      "cashSales": 5400.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 0.0,
+        "Transport": 0.0,
+        "Other": 0.0
+      },
+      "expensePaidOnline": 800.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-19",
+      "onlineSales": 22529.0,
+      "cashSales": 2000.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 0.0,
+        "Transport": 0.0,
+        "Other": 500.0
+      },
+      "expensePaidOnline": 1300.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-20",
+      "onlineSales": 14726.0,
+      "cashSales": 1000.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 52.0,
+        "Transport": 0.0,
+        "Other": 1771.0
+      },
+      "expensePaidOnline": 2623.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-22",
+      "onlineSales": 18110.0,
+      "cashSales": 0.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 52.0,
+        "Transport": 0.0,
+        "Other": 0.0
+      },
+      "expensePaidOnline": 852.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-23",
+      "onlineSales": 14560.0,
+      "cashSales": 0.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 20.0,
+        "Transport": 475.0,
+        "Other": 0.0
+      },
+      "expensePaidOnline": 1295.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    },
+    {
+      "date": "2026-09-24",
+      "onlineSales": 5399.0,
+      "cashSales": 1000.0,
+      "expenses": {
+        "Police": 800.0,
+        "Shop": 2032.0,
+        "Transport": 2000.0,
+        "Other": 263.0
+      },
+      "expensePaidOnline": 5095.0,
+      "expensePaidCash": 0.0,
+      "notes": ""
+    }
+  ],
+  "purchaseEntries": [
+    {
+      "purchaseDate": "2026-09-24",
+      "paymentDate": "2026-09-24",
+      "vendorAmounts": {
+        "RawDawg": 64049.0,
+        "Fetch": 95077.0,
+        "Nord": 0.0,
+        "Belucci": 26500.0,
+        "FoolHardy": 0.0,
+        "Core": 0.0,
+        "Dexer": 0.0,
+        "Nordich": 0.0,
+        "Never": 0.0,
+        "Ozaro": 8200.0
+      },
+      "onlinePurchasePaid": 193826.0,
+      "cashPurchasePaid": 0.0
+    }
+  ]
+}
