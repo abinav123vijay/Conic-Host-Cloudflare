@@ -10,10 +10,10 @@ const ownerLinks=[
   ['/dashboard/monthly','Monthly Dashboard'],['/dashboard/yearly','Yearly Dashboard'],
   ['/entries/daily','Daily Sales & Expenses'],['/entries/purchases','Weekly Purchases'],
   ['/finance','Finance'],['/settings','Settings'],['/import-export','Excel Import / Export']
-] as const satisfies ReadonlyArray<readonly [Route, string]>;
+] as const;
 const staffLinks=[
   ['/entries/daily','Daily Sales & Expenses'],['/entries/purchases','Weekly Purchases']
-] as const satisfies ReadonlyArray<readonly [Route, string]>;
+] as const;
 export default function Shell({children}:{children:React.ReactNode}){
   const path=usePathname(); const router=useRouter(); const [open,setOpen]=useState(false);
   const [role,setRole]=useState<'owner'|'staff'|'viewer'|null>(null);
@@ -24,7 +24,7 @@ export default function Shell({children}:{children:React.ReactNode}){
   return <div className="app-shell">
     <aside className={`sidebar ${open?'open':''}`}>
       <div className="brand"><div className="brand-mark">C</div><div><strong>CONIC</strong><span>Business System</span></div></div>
-      <nav>{links.map(([href,label])=><Link key={href} href={href} onClick={()=>setOpen(false)} className={path.startsWith(href)?'active':''}>{label}</Link>)}</nav>
+      <nav>{links.map(([href,label])=><Link key={href} href={href as Route} onClick={()=>setOpen(false)} className={path.startsWith(href)?'active':''}>{label}</Link>)}</nav>
       <div className="sidebar-footer">MongoDB-backed • Multi-device</div>
     </aside>
     <div className="backdrop" onClick={()=>setOpen(false)} />

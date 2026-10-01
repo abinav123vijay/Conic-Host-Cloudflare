@@ -7,7 +7,7 @@ declare global {
   var __conicMongoDb: Db | undefined;
 }
 
-const uri = process.env.MONGODB_URI;
+const uri = process.env.MONGODB_URI ?? '';
 const dbName = process.env.MONGODB_DB || 'conic';
 
 if (!uri) throw new Error('MONGODB_URI is not configured. Copy .env.example to .env.local.');

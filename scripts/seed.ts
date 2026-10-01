@@ -22,7 +22,7 @@ async function main() {
     await client.connect();
     const db = client.db(dbName);
 
-    await db.collection('businesses').updateOne(
+    await db.collection<{_id:string}>('businesses').updateOne(
       { _id: 'conic-main' },
       {
         $set: {

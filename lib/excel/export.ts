@@ -327,7 +327,7 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
 
 export async function exportWorkbook(): Promise<Buffer> {
   const db=await getDb();
-  const business = await db.collection('businesses').findOne({_id:BUSINESS_ID}) as any;
+  const business = await db.collection<{_id:string;name?:string;openingOnlineBalance?:number;openingCashBalance?:number;vendors?:string[];expenseCategories?:string[]}>('businesses').findOne({_id:BUSINESS_ID});
   const daily=await db.collection<DailyEntry>('dailyEntries').find({businessId:BUSINESS_ID}).sort({date:1}).toArray();
   const purchases=await db.collection<PurchaseEntry>('purchaseEntries').find({businessId:BUSINESS_ID}).sort({purchaseDate:1}).toArray();
   const [financeMonths,loans,vendorReturns]=await Promise.all([

@@ -8,7 +8,7 @@ const money = (n: unknown) => Number(n || 0);
 
 export async function getSettings(): Promise<BusinessSettings> {
   const db = await getDb();
-  const doc = await db.collection('businesses').findOne({ _id: BUSINESS_ID });
+  const doc = await db.collection<{_id:string;name?:string;openingOnlineBalance?:number;openingCashBalance?:number;vendors?:string[];expenseCategories?:string[];updatedAt?:Date}>('businesses').findOne({ _id: BUSINESS_ID });
   return {
     _id: BUSINESS_ID,
     name: String(doc?.name || 'CONIC'),

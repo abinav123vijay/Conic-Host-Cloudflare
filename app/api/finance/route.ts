@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
   });
   return NextResponse.json({
     finance: finance || { businessId: BUSINESS_ID, period, year, month, salaries: [], truckEmi: 0, autoEmi: 0, roomRent: 0, savingsDeposit: 0, partnerPayments: [] },
+    isSaved: Boolean(finance),
     savingsBalance,
     savingsHistory,
     loans: loans.map(loan => ({ ...loan, repaid: sum((loan.repayments || []).map((entry: { amount: number }) => Number(entry.amount || 0))), outstanding: Math.max(0, Number(loan.amountTaken || 0) - sum((loan.repayments || []).map((entry: { amount: number }) => Number(entry.amount || 0)))) })),
@@ -60,4 +61,22 @@ export async function PUT(request: Request) {
     { upsert: true }
   );
   return NextResponse.json({ ok: true, savingsBalance: savingsAfterUpdate });
+}
+
+export async function DELETE(request: NextRequest) {
+  const period = request.nextUrl.searchParams.get('period') || '';
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return NextResponse.json({ error: 'A valid month is required.' }, { status: 400 });
+
+  const collection = (await getDb()).collection<FinanceMonth>('monthlyFinance');
+  const existing = await collection.find({ businessId: BUSINESS_ID }).toArray();
+  if (!existing.some(item => item.period === period)) return NextResponse.json({ error: 'Monthly finance record not found.' }, { status: 404 });
+
+  let savingsBalance = 0;
+  for (const item of existing.filter(item => item.period !== period).sort((left, right) => left.period.localeCompare(right.period))) {
+    savingsBalance += Number(item.savingsDeposit || 0) - sum((item.partnerPayments || []).map(payment => Number(payment.amount || 0)));
+    if (savingsBalance < 0) return NextResponse.json({ error: `Deleting this month would make savings negative after ${item.period}.` }, { status: 400 });
+  }
+
+  await collection.deleteOne({ businessId: BUSINESS_ID, period });
+  return NextResponse.json({ ok: true, savingsBalance });
 }
