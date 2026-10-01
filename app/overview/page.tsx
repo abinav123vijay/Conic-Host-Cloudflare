@@ -59,7 +59,7 @@ export default function OverviewPage() {
       <KPI title="Monthly Sales" value={currency(monthly.totalSales)} sub={`Online ${currency(monthly.onlineSales)} · Cash ${currency(monthly.cashSales)}`} />
       <KPI title="Monthly Purchases" value={currency(monthly.totalPurchases)} sub={`${currency(monthly.purchaseStatus.pending)} pending`} />
       <KPI title="Monthly Expenses" value={currency(monthly.totalExpenses)} />
-      <KPI title="Monthly Net" value={currency(monthly.netAmount)} />
+      <KPI title="Closing Balance" value={currency(monthly.totalBalance)} sub="Includes carried balance and monthly EMIs" />
     </div>
     <div className="grid chart-grid overview-charts">
       <DonutChart title="Sales Mix" segments={[
@@ -82,7 +82,7 @@ export default function OverviewPage() {
         { key: 'online', label: 'Online Balance', color: '#0f766e' },
         { key: 'cash', label: 'Cash Balance', color: '#be185d' }
       ]} />
-      <LineChart title="Monthly Net Trend" data={yearly.months.map(item => ({ label: item.label.slice(0, 3), value: item.netAmount }))} />
+      <LineChart title="Closing Balance Trend" data={yearly.months.map(item => ({ label: item.label.slice(0, 3), value: item.closingBalance }))} />
       <div className="card chart-card purchase-breakdown">
         <div className="card-title">Purchase-related Expenses</div>
         <p className="purchase-breakdown-subtitle">Additional costs included in total purchase outflow.</p>

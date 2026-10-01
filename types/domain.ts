@@ -38,8 +38,8 @@ export type PurchaseEntry = {
   updatedAt?: string;
 };
 
-export type SalaryPayment = { person: string; amount: number };
-export type PartnerSavingsPayment = { partner: string; amount: number };
+export type SalaryPayment = { person: string; amount: number; paymentDate?: string };
+export type PartnerSavingsPayment = { partner: string; amount: number; paymentDate?: string };
 export type FinanceMonth = {
   _id?: string;
   businessId: string;
@@ -48,7 +48,9 @@ export type FinanceMonth = {
   month: number;
   salaries: SalaryPayment[];
   truckEmi: number;
+  truckEmiPaymentDate?: string;
   autoEmi: number;
+  autoEmiPaymentDate?: string;
   roomRent: number;
   savingsDeposit: number;
   partnerPayments: PartnerSavingsPayment[];

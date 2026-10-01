@@ -181,12 +181,14 @@
           "period": { "bsonType": "string", "pattern": "^[0-9]{4}-[0-9]{2}$" },
           "year": { "bsonType": "int" },
           "month": { "bsonType": "int", "minimum": 1, "maximum": 12 },
-          "salaries": { "bsonType": "array", "items": { "bsonType": "object", "required": ["person", "amount"], "properties": { "person": { "bsonType": "string" }, "amount": { "bsonType": "number", "minimum": 0 } } } },
+          "salaries": { "bsonType": "array", "items": { "bsonType": "object", "required": ["person", "amount"], "properties": { "person": { "bsonType": "string" }, "amount": { "bsonType": "number", "minimum": 0 }, "paymentDate": { "bsonType": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" } } } },
           "truckEmi": { "bsonType": "number", "minimum": 0 },
+          "truckEmiPaymentDate": { "bsonType": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
           "autoEmi": { "bsonType": "number", "minimum": 0 },
+          "autoEmiPaymentDate": { "bsonType": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
           "roomRent": { "bsonType": "number", "minimum": 0 },
           "savingsDeposit": { "bsonType": "number", "minimum": 0 },
-          "partnerPayments": { "bsonType": "array", "items": { "bsonType": "object", "required": ["partner", "amount"], "properties": { "partner": { "bsonType": "string" }, "amount": { "bsonType": "number", "minimum": 0 } } } },
+          "partnerPayments": { "bsonType": "array", "items": { "bsonType": "object", "required": ["partner", "amount"], "properties": { "partner": { "bsonType": "string" }, "amount": { "bsonType": "number", "minimum": 0 }, "paymentDate": { "bsonType": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" } } } },
           "updatedAt": { "bsonType": "date" }
         }
       }

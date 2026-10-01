@@ -2,6 +2,7 @@
 
 import './settings.css';
 import { useEffect, useState } from 'react';
+import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_VENDORS } from '@/lib/constants';
 
 type Settings = {
   name: string;
@@ -14,6 +15,9 @@ type Settings = {
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetConfirmation, setResetConfirmation] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -63,6 +67,26 @@ export default function SettingsPage() {
     }
   };
 
+  const resetAppData = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (resetConfirmation !== 'RESET') return;
+    setResetting(true);
+    setError('');
+    setResetMessage('');
+    try {
+      const response = await fetch('/api/settings/reset', { method: 'POST' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not reset business data.');
+      setSettings({ name: 'CONIC', openingOnlineBalance: 0, openingCashBalance: 0, vendors: DEFAULT_VENDORS, expenseCategories: DEFAULT_EXPENSE_CATEGORIES });
+      setResetConfirmation('');
+      setResetMessage('Business data reset. Enter new opening balances above and save settings.');
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : 'Could not reset business data.');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   return <section className="content">
     <div className="page-head">
       <div><h1>Settings</h1><p>Opening balances, vendor master and expense categories.</p></div>
@@ -90,5 +114,17 @@ export default function SettingsPage() {
     </div>
     {error && <p className="login-error" role="alert">{error}</p>}
     <div className="form-actions"><button onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save Settings'}</button></div>
+    <section className="card settings-reset" aria-labelledby="settings-reset-title">
+      <div>
+        <h2 id="settings-reset-title">Reset business data</h2>
+        <p>Deletes sales, purchases, finance records, refunds and audit history for this business. Login accounts and the database structure remain. Opening balances reset to zero; you can enter new balances above afterward.</p>
+      </div>
+      <form className="settings-reset-form" onSubmit={resetAppData}>
+        <label htmlFor="reset-confirmation">Type RESET to confirm</label>
+        <input id="reset-confirmation" value={resetConfirmation} onChange={event => setResetConfirmation(event.target.value)} autoComplete="off" />
+        <button type="submit" className="settings-reset-button" disabled={resetConfirmation !== 'RESET' || resetting}>{resetting ? 'Resetting...' : 'Reset business data'}</button>
+      </form>
+      {resetMessage && <p className="settings-reset-success" role="status">{resetMessage}</p>}
+    </section>
   </section>;
 }

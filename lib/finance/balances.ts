@@ -14,13 +14,15 @@ export function calculateBalancesThrough(
 ) {
   const dailyThrough = daily.filter(entry => entry.date <= date);
   const purchasesThrough = purchases.filter(purchase => (purchase.paymentDate || purchase.purchaseDate) <= date);
-  const financeOutflow = sum(finance.filter(entry => {
+  const financeOutflow = sum(finance.map(entry => {
     const [year, month] = entry.period.split('-').map(Number);
-    return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10) <= date;
-  }).map(entry =>
-    sum((entry.salaries || []).map(salary => amount(salary.amount))) +
-    amount(entry.truckEmi) + amount(entry.autoEmi) + amount(entry.roomRent) + amount(entry.savingsDeposit)
-  ));
+    const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    const salaryPayments = sum((entry.salaries || []).filter(salary => (salary.paymentDate || periodEnd) <= date).map(salary => amount(salary.amount)));
+    const truckEmi = (entry.truckEmiPaymentDate || periodEnd) <= date ? amount(entry.truckEmi) : 0;
+    const autoEmi = (entry.autoEmiPaymentDate || periodEnd) <= date ? amount(entry.autoEmi) : 0;
+    const monthEndOutflows = periodEnd <= date ? amount(entry.roomRent) + amount(entry.savingsDeposit) : 0;
+    return salaryPayments + truckEmi + autoEmi + monthEndOutflows;
+  }));
   const loanRepayments = sum(loans.flatMap(loan =>
     (loan.repayments || []).filter(repayment => repayment.date <= date).map(repayment => amount(repayment.amount))
   ));
