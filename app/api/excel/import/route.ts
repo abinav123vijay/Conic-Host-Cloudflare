@@ -2,5 +2,53 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { BUSINESS_ID } from '@/lib/constants';
 import { parseConicWorkbook } from '@/lib/excel/parse';
-export const runtime='nodejs';
-export async function POST(req:Request){const form=await req.formData(); const file=form.get('file'); if(!(file instanceof File)) return NextResponse.json({error:'Excel file is required'},{status:400}); const parsed=parseConicWorkbook(Buffer.from(await file.arrayBuffer()),BUSINESS_ID); const db=await getDb(); await db.collection('businesses').updateOne({_id:BUSINESS_ID},{$set:{name:parsed.settings.name,openingOnlineBalance:parsed.settings.openingOnlineBalance,openingCashBalance:parsed.settings.openingCashBalance,vendors:parsed.settings.vendors,expenseCategories:parsed.settings.expenseCategories,updatedAt:new Date()}},{upsert:true}); await db.collection('dailyEntries').deleteMany({businessId:BUSINESS_ID}); if(parsed.dailyEntries.length) await db.collection('dailyEntries').insertMany(parsed.dailyEntries.map(x=>({...x,createdAt:new Date(),updatedAt:new Date()}))); await db.collection('purchaseEntries').deleteMany({businessId:BUSINESS_ID}); if(parsed.purchaseEntries.length) await db.collection('purchaseEntries').insertMany(parsed.purchaseEntries.map(x=>({...x,createdAt:new Date(),updatedAt:new Date()}))); return NextResponse.json({ok:true,daily:parsed.dailyEntries.length,purchases:parsed.purchaseEntries.length,vendors:parsed.settings.vendors.length});}
+
+export const runtime = 'nodejs';
+type BusinessRecord = { _id: string; name: string; openingOnlineBalance: number; openingCashBalance: number; vendors: string[]; expenseCategories: string[]; updatedAt: Date };
+
+export async function POST(request: Request) {
+  const form = await request.formData();
+  const file = form.get('file');
+  if (!(file instanceof File)) return NextResponse.json({ error: 'Excel file is required' }, { status: 400 });
+
+  const parsed = parseConicWorkbook(Buffer.from(await file.arrayBuffer()), BUSINESS_ID);
+  const db = await getDb();
+  const now = new Date();
+  await db.collection<BusinessRecord>('businesses').updateOne(
+    { _id: BUSINESS_ID },
+    { $set: { name: parsed.settings.name, openingOnlineBalance: parsed.settings.openingOnlineBalance, openingCashBalance: parsed.settings.openingCashBalance, vendors: parsed.settings.vendors, expenseCategories: parsed.settings.expenseCategories, updatedAt: now } },
+    { upsert: true }
+  );
+
+  await db.collection('dailyEntries').deleteMany({ businessId: BUSINESS_ID });
+  const dailyDocuments=parsed.dailyEntries.map(({ _id, ...entry }) => ({ ...entry, createdAt: now, updatedAt: now }));
+  if (dailyDocuments.length) await db.collection('dailyEntries').insertMany(dailyDocuments);
+
+  await db.collection('purchaseEntries').deleteMany({ businessId: BUSINESS_ID });
+  const purchaseDocuments=parsed.purchaseEntries.map(({ _id, ...entry }) => ({ ...entry, createdAt: now, updatedAt: now }));
+  if (purchaseDocuments.length) await db.collection('purchaseEntries').insertMany(purchaseDocuments);
+
+  if (parsed.financeDataPresent) {
+    await Promise.all([
+      db.collection('monthlyFinance').deleteMany({ businessId: BUSINESS_ID }),
+      db.collection('financeLoans').deleteMany({ businessId: BUSINESS_ID }),
+      db.collection('vendorDefectReturns').deleteMany({ businessId: BUSINESS_ID })
+    ]);
+    const financeDocuments=parsed.monthlyFinance.map(({ _id, ...entry }) => ({ ...entry, createdAt: now, updatedAt: now }));
+    const loanDocuments=parsed.financeLoans.map(({ _id, ...entry }) => ({ ...entry, createdAt: now, updatedAt: now }));
+    const vendorReturnDocuments=parsed.vendorDefectReturns.map(({ _id, ...entry }) => ({ ...entry, createdAt: now, updatedAt: now }));
+    if (financeDocuments.length) await db.collection('monthlyFinance').insertMany(financeDocuments);
+    if (loanDocuments.length) await db.collection('financeLoans').insertMany(loanDocuments);
+    if (vendorReturnDocuments.length) await db.collection('vendorDefectReturns').insertMany(vendorReturnDocuments);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    daily: parsed.dailyEntries.length,
+    purchases: parsed.purchaseEntries.length,
+    vendors: parsed.settings.vendors.length,
+    monthlyFinance: parsed.monthlyFinance.length,
+    loans: parsed.financeLoans.length,
+    vendorDefectReturns: parsed.vendorDefectReturns.length
+  });
+}

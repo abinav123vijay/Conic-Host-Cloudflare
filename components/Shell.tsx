@@ -9,7 +9,7 @@ const ownerLinks=[
   ['/overview','Overview'],
   ['/dashboard/monthly','Monthly Dashboard'],['/dashboard/yearly','Yearly Dashboard'],
   ['/entries/daily','Daily Sales & Expenses'],['/entries/purchases','Weekly Purchases'],
-  ['/settings','Settings'],['/import-export','Excel Import / Export']
+  ['/finance','Finance'],['/settings','Settings'],['/import-export','Excel Import / Export']
 ] as const satisfies ReadonlyArray<readonly [Route, string]>;
 const staffLinks=[
   ['/entries/daily','Daily Sales & Expenses'],['/entries/purchases','Weekly Purchases']

@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import type { DailyEntry, PurchaseEntry, BusinessSettings } from '@/types/domain';
+import type { DailyEntry, FinanceLoan, FinanceMonth, PurchaseEntry, BusinessSettings, VendorDefectReturn } from '@/types/domain';
 import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_VENDORS } from '@/lib/constants';
 
 function toNumber(v: unknown) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
@@ -64,6 +64,57 @@ export function parseConicWorkbook(buffer: Buffer, businessId: string) {
     }
   }
 
+  const financeSheet=book.Sheets['Additional Finance'];
+  const financeDataPresent=Boolean(financeSheet);
+  const monthlyFinanceMap=new Map<string,FinanceMonth>();
+  const financeLoansMap=new Map<string,FinanceLoan>();
+  const vendorReturnsMap=new Map<string,VendorDefectReturn>();
+  if(financeSheet){
+    const financeRows=XLSX.utils.sheet_to_json<any[]>(financeSheet,{header:1,defval:null}).slice(3);
+    const getMonth=(period:string)=>{
+      if(!/^\d{4}-\d{2}$/.test(period))return null;
+      if(!monthlyFinanceMap.has(period)){
+        const [year,month]=period.split('-').map(Number);
+        monthlyFinanceMap.set(period,{businessId,period,year,month,salaries:[],truckEmi:0,autoEmi:0,roomRent:0,savingsDeposit:0,partnerPayments:[]});
+      }
+      return monthlyFinanceMap.get(period)!;
+    };
+    for(const row of financeRows){
+      const type=String(row?.[0]||'').trim(),dateOrPeriod=String(row?.[1]||'').trim(),name=String(row?.[2]||'').trim(),source=String(row?.[3]||'').trim();
+      const value=toNumber(row?.[4]),recordId=String(row?.[8]||'').trim();
+      if(!type)continue;
+      if(['Salary','Truck EMI','Auto EMI','Room Rent','Savings Deposit','Partner Payout'].includes(type)){
+        const month=getMonth(dateOrPeriod);if(!month)continue;
+        if(type==='Salary'&&name)month.salaries.push({person:name,amount:value});
+        else if(type==='Truck EMI')month.truckEmi=value;
+        else if(type==='Auto EMI')month.autoEmi=value;
+        else if(type==='Room Rent')month.roomRent=value;
+        else if(type==='Savings Deposit')month.savingsDeposit=value;
+        else if(type==='Partner Payout'&&name)month.partnerPayments.push({partner:name,amount:value});
+        continue;
+      }
+      if(type==='Loan Received'){
+        const takenDate=toISODate(dateOrPeriod);if(!takenDate||!name)continue;
+        const key=recordId||`${name}|${takenDate}|${source}`;
+        financeLoansMap.set(key,{businessId,person:name,source:source==='partner'||source==='other'?source:'friend',amountTaken:value,takenDate,repayments:[],notes:String(row?.[7]||'')});
+      }else if(type==='Loan Repayment'){
+        const date=toISODate(dateOrPeriod);if(!date)continue;
+        const key=recordId||`${name}|${date}|${source}`;
+        const loan=financeLoansMap.get(key);
+        if(loan)loan.repayments.push({date,amount:value});
+      }else if(type==='Vendor Defect Return'){
+        const returnDate=toISODate(dateOrPeriod);if(!returnDate||!name)continue;
+        const key=recordId||`${name}|${returnDate}`;
+        vendorReturnsMap.set(key,{businessId,vendor:name,returnDate,amount:value,receipts:[],notes:String(row?.[7]||'')});
+      }else if(type==='Vendor Refund Received'){
+        const date=toISODate(dateOrPeriod);if(!date)continue;
+        const key=recordId||`${name}|${date}`;
+        const credit=vendorReturnsMap.get(key);
+        if(credit)credit.receipts.push({date,amount:value});
+      }
+    }
+  }
+
   const settings: BusinessSettings = { name: 'CONIC', currency: 'INR', dateFormat: 'DD-MMM-YYYY', openingOnlineBalance, openingCashBalance, vendors: finalVendors, expenseCategories: finalExpenses };
-  return { settings, dailyEntries, purchaseEntries };
+  return { settings, dailyEntries, purchaseEntries, financeDataPresent, monthlyFinance: [...monthlyFinanceMap.values()], financeLoans: [...financeLoansMap.values()], vendorDefectReturns: [...vendorReturnsMap.values()] };
 }

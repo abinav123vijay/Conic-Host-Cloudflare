@@ -26,7 +26,7 @@ export function proxy(request: NextRequest) {
   const isEntryApi = pathname.startsWith('/api/daily') || pathname.startsWith('/api/purchases');
   const isEntryDelete = isEntryApi && request.method === 'DELETE';
   const isSettingsRead = pathname === '/api/settings' && request.method === 'GET';
-  const isOwnerOnly = pathname === '/' || pathname.startsWith('/overview') || pathname.startsWith('/dashboard') || pathname.startsWith('/settings') || pathname.startsWith('/import-export') || (isApi && !isEntryApi && !isSettingsRead);
+  const isOwnerOnly = pathname === '/' || pathname.startsWith('/overview') || pathname.startsWith('/dashboard') || pathname.startsWith('/finance') || pathname.startsWith('/settings') || pathname.startsWith('/import-export') || (isApi && !isEntryApi && !isSettingsRead);
 
   if (session.role === 'owner') {
     if (pathname === '/') return NextResponse.redirect(new URL('/dashboard/monthly', request.url));
@@ -50,5 +50,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/overview/:path*', '/dashboard/:path*', '/entries/:path*', '/settings/:path*', '/import-export/:path*', '/api/:path*']
+  matcher: ['/', '/overview/:path*', '/dashboard/:path*', '/finance/:path*', '/entries/:path*', '/settings/:path*', '/import-export/:path*', '/api/:path*']
 };

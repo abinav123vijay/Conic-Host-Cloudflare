@@ -19,6 +19,7 @@ The MongoDB/Next.js integration follows MongoDB's official Next.js pattern: a sh
 - `/dashboard/yearly` — January–December table and trend charts
 - `/entries/daily` — daily sales and expense entry
 - `/entries/purchases` — weekly/vendor purchase entry and payment tracking
+- `/finance` — monthly salary, EMI, rent, savings, partner payouts, loans and vendor defect refunds (owner only)
 - `/settings` — opening balances, vendor master, expense categories
 - `/import-export` — Excel import/export bridge
 - `/api/health` — MongoDB connection check
@@ -28,6 +29,9 @@ The MongoDB/Next.js integration follows MongoDB's official Next.js pattern: a sh
 - `businesses`
 - `dailyEntries`
 - `purchaseEntries`
+- `monthlyFinance`
+- `financeLoans`
+- `vendorDefectReturns`
 - `users`
 - `auditLogs`
 
@@ -42,6 +46,9 @@ See `mongodb/schema.json` for the MongoDB validators and indexes.
 - A blank purchase payment date is treated as the purchase date for balance calculations.
 - Pending purchase = total purchase - online paid - cash paid.
 - Online/cash closing balances include sales, expense payments and purchase payments.
+- Monthly salaries, truck/auto EMIs, room rent, and savings deposits reduce combined total balance; they do not change online/cash subtotals.
+- Partner payouts reduce the savings ledger, not sales balance. Borrowed loan amounts stay separate; loan repayments reduce total balance.
+- Vendor defect-return credits increase total balance only when receipts are recorded; pending credits remain separate.
 - Monthly balances roll forward automatically.
 - Yearly dashboard is the sum of the twelve monthly periods for the selected year.
 
@@ -54,6 +61,7 @@ See `mongodb/schema.json` for the MongoDB validators and indexes.
 - Settings
 - Daily Sales & Expenses
 - Weekly Purchases
+- Additional Finance & Liabilities
 
 The imported data replaces the current business dataset for the configured `CONIC_BUSINESS_ID`.
 
