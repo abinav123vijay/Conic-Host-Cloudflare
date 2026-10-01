@@ -188,6 +188,7 @@
           "autoEmiPaymentDate": { "bsonType": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
           "roomRent": { "bsonType": "number", "minimum": 0 },
           "savingsDeposit": { "bsonType": "number", "minimum": 0 },
+          "savingsEntries": { "bsonType": "array", "items": { "bsonType": "object", "required": ["date", "amount"], "properties": { "date": { "bsonType": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }, "amount": { "bsonType": "number", "minimum": 0.01 }, "note": { "bsonType": "string" } } } },
           "partnerPayments": { "bsonType": "array", "items": { "bsonType": "object", "required": ["partner", "amount"], "properties": { "partner": { "bsonType": "string" }, "amount": { "bsonType": "number", "minimum": 0 }, "paymentDate": { "bsonType": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" } } } },
           "updatedAt": { "bsonType": "date" }
         }

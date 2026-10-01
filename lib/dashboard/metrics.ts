@@ -90,7 +90,7 @@ export async function getMonthlyDashboard(year: number, month: number): Promise<
   const pending = Math.max(0, totalPurchases - paid);
   const latest = [...monthDaily].sort((a,b) => a.date.localeCompare(b.date)).at(-1);
   const latestBalance = latest ? flowsThrough(latest.date, daily, purchases, { online: settings.openingOnlineBalance, cash: settings.openingCashBalance }, finance, vendorReturns, loans).total : closing.total;
-  const savingsBalance=sum(finance.map(item=>money(item.savingsDeposit)-sum((item.partnerPayments||[]).map(payment=>money(payment.amount)))));
+  const savingsBalance=sum(finance.map(item=>money(item.savingsDeposit)+sum((item.savingsEntries||[]).map(entry=>money(entry.amount)))-sum((item.partnerPayments||[]).map(payment=>money(payment.amount)))));
   const loanOutstanding=sum(loans.map(loan=>money(loan.amountTaken)-sum((loan.repayments||[]).map(repayment=>money(repayment.amount)))));
   const endReceipts=vendorReturns.flatMap(item=>(item.receipts||[]).filter(receipt=>receipt.date<=end).map(receipt=>money(receipt.amount)));
   const vendorCreditsReceivedThisMonth=sum(vendorReturns.flatMap(item=>(item.receipts||[]).filter(receipt=>receipt.date>=start&&receipt.date<=end).map(receipt=>money(receipt.amount))));
@@ -102,7 +102,7 @@ export async function getMonthlyDashboard(year: number, month: number): Promise<
     netAmount: onlineSales + cashSales - totalPurchases - totalExpenses,
     latestDay: latest ? { date: latest.date, sales: salesTotal(latest), expenses: expenseTotal(latest), net: salesTotal(latest) - expenseTotal(latest), balance: latestBalance } : { date: null, sales: 0, expenses: 0, net: 0, balance: closing.total },
     daily: dailyOut, expenseBreakdown, vendorPurchases, purchaseRelatedExpenses, purchaseStatus: { paid, pending }, opening,
-    financeSummary:{salaries:salaryTotal,truckEmi:monthlyExpenses.truckEmi,autoEmi:monthlyExpenses.autoEmi,roomRent:monthlyExpenses.roomRent,savingsDeposit:money(monthFinance?.savingsDeposit),partnerPayments,savingsBalance,loanRepayments,loanOutstanding,vendorCreditsPending,vendorCreditsReceived:vendorCreditsReceivedThisMonth}
+    financeSummary:{salaries:salaryTotal,truckEmi:monthlyExpenses.truckEmi,autoEmi:monthlyExpenses.autoEmi,roomRent:monthlyExpenses.roomRent,savingsDeposit:money(monthFinance?.savingsDeposit)+sum((monthFinance?.savingsEntries||[]).map(entry=>money(entry.amount))),partnerPayments,savingsBalance,loanRepayments,loanOutstanding,vendorCreditsPending,vendorCreditsReceived:vendorCreditsReceivedThisMonth}
   };
 }
 

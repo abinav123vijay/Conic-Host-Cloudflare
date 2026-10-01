@@ -6,7 +6,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { BarChart, DonutChart, KPI, LineChart } from '@/components/Charts';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { MonthYear } from '@/components/Controls';
-import type { FinanceLoan, FinanceMonth, LoanRepayment, PartnerSavingsPayment, SalaryPayment, VendorDefectReturn, VendorRefundReceipt } from '@/types/domain';
+import type { FinanceLoan, FinanceMonth, LoanRepayment, PartnerSavingsPayment, SalaryPayment, SavingsDeposit, VendorDefectReturn, VendorRefundReceipt } from '@/types/domain';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const monthEndDate = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
@@ -29,8 +29,10 @@ export default function FinancePage() {
   const [isSavedMonth, setIsSavedMonth] = useState(false);
   const [editingMonth, setEditingMonth] = useState(false);
   const [editingPartnerPayments, setEditingPartnerPayments] = useState(false);
+  const [editingSavings, setEditingSavings] = useState(false);
   const [salaries, setSalaries] = useState<SalaryPayment[]>([]);
   const [partnerPayments, setPartnerPayments] = useState<PartnerSavingsPayment[]>([]);
+  const [savingsEntries, setSavingsEntries] = useState<SavingsDeposit[]>([]);
   const [loans, setLoans] = useState<FinanceLoanRow[]>([]);
   const [vendorReturns, setVendorReturns] = useState<VendorReturnRow[]>([]);
   const [savingsBalance, setSavingsBalance] = useState(0);
@@ -42,6 +44,7 @@ export default function FinancePage() {
   const [roomRent, setRoomRent] = useState(0);
   const [savingsDeposit, setSavingsDeposit] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [savingSavings, setSavingSavings] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteError, setDeleteError] = useState('');
@@ -65,9 +68,11 @@ export default function FinancePage() {
     setIsSavedMonth(data.isSaved);
     setEditingMonth(!data.isSaved);
     setEditingPartnerPayments(!data.isSaved);
+    setEditingSavings(!data.isSaved);
     const periodEnd = monthEndDate(year, month);
     setSalaries((data.finance.salaries || []).map(salary => ({ ...salary, paymentDate: salary.paymentDate || periodEnd })));
     setPartnerPayments((data.finance.partnerPayments || []).map(payment => ({ ...payment, paymentDate: payment.paymentDate || periodEnd })));
+    setSavingsEntries(data.finance.savingsEntries || []);
     setTruckEmi(data.finance.truckEmi || 0);
     setTruckEmiPaymentDate(data.finance.truckEmiPaymentDate || periodEnd);
     setAutoEmi(data.finance.autoEmi || 0);
@@ -100,7 +105,7 @@ export default function FinancePage() {
       const response = await fetch('/api/finance', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ period: `${year}-${String(month).padStart(2, '0')}`, salaries: salaries.filter(item => item.person.trim() || item.amount > 0), truckEmi, truckEmiPaymentDate, autoEmi, autoEmiPaymentDate, roomRent, savingsDeposit, partnerPayments: partnerPayments.filter(item => item.partner.trim() || item.amount > 0) })
+        body: JSON.stringify({ period: `${year}-${String(month).padStart(2, '0')}`, salaries: salaries.filter(item => item.person.trim() || item.amount > 0), truckEmi, truckEmiPaymentDate, autoEmi, autoEmiPaymentDate, roomRent, savingsDeposit, savingsEntries, partnerPayments: partnerPayments.filter(item => item.partner.trim() || item.amount > 0) })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not save monthly finance.');
@@ -111,6 +116,32 @@ export default function FinancePage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveSavings = async () => {
+    setSavingSavings(true);
+    setError('');
+    try {
+      const response = await fetch('/api/finance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period: `${year}-${String(month).padStart(2, '0')}`, savingsEntries: savingsEntries.filter(entry => entry.amount > 0) })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save savings deposits.');
+      setSavingsBalance(result.savingsBalance);
+      await load();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Could not save savings deposits.');
+    } finally {
+      setSavingSavings(false);
+    }
+  };
+
+  const addSavingsEntry = () => {
+    const date = today() >= periodStart && today() <= periodEnd ? today() : periodEnd;
+    setSavingsEntries(entries => [...entries, { date, amount: 0, note: '' }]);
+    setEditingSavings(true);
   };
 
   const addLoan = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -213,8 +244,10 @@ export default function FinancePage() {
   if (!finance) return error ? <section className="content" role="alert">{error}</section> : <div className="loading">Loading finance…</div>;
   const periodStart=`${year}-${String(month).padStart(2,'0')}-01`;
   const periodEnd=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);
+  const savingsEntriesTotal = total(savingsEntries.map(entry => entry.amount));
+  const savingsDepositedThisMonth = savingsDeposit + savingsEntriesTotal;
   const loanRepaymentsThisMonth=total(loans.flatMap(loan=>(loan.repayments||[]).filter(repayment=>repayment.date>=periodStart&&repayment.date<=periodEnd).map(repayment=>repayment.amount)));
-  const monthlyOutflow = total([...salaries.map(item => item.amount), truckEmi, autoEmi, roomRent, savingsDeposit, loanRepaymentsThisMonth]);
+  const monthlyOutflow = total([...salaries.map(item => item.amount), truckEmi, autoEmi, roomRent, savingsDepositedThisMonth, loanRepaymentsThisMonth]);
   const salaryTotal = total(salaries.map(item => item.amount));
   const partnerPaymentsTotal = total(partnerPayments.map(item => item.amount));
   const loanOutstanding = total(loans.map(loan => loan.outstanding));
@@ -225,7 +258,8 @@ export default function FinancePage() {
     { date: truckEmiPaymentDate, type: 'Truck EMI', recipient: 'Truck finance', amount: truckEmi },
     { date: autoEmiPaymentDate, type: 'Auto EMI', recipient: 'Auto finance', amount: autoEmi },
     { date: periodEnd, type: 'Room rent', recipient: 'Room rent', amount: roomRent },
-    { date: periodEnd, type: 'Savings deposit', recipient: 'Savings', amount: savingsDeposit },
+    ...(savingsDeposit > 0 ? [{ date: periodEnd, type: 'Monthly savings', recipient: 'Savings', amount: savingsDeposit }] : []),
+    ...savingsEntries.map(entry => ({ date: entry.date, type: 'Savings deposit', recipient: entry.note || 'Savings', amount: entry.amount })),
     ...loans.flatMap(loan => (loan.repayments || []).filter(repayment => repayment.date >= periodStart && repayment.date <= periodEnd).map(repayment => ({ date: repayment.date, type: 'Loan repayment', recipient: loan.person, amount: repayment.amount })))
   ].filter(item => item.amount > 0);
   const monthlyOutflowMix=[
@@ -233,7 +267,7 @@ export default function FinancePage() {
     {label:'Truck EMI',value:truckEmi},
     {label:'Auto EMI',value:autoEmi},
     {label:'Room rent',value:roomRent},
-    {label:'Savings deposited',value:savingsDeposit},
+    {label:'Savings deposited',value:savingsDepositedThisMonth},
     {label:'Loan repayments',value:loanRepaymentsThisMonth}
   ].filter(item=>item.value>0);
   const savingsTrend=savingsHistory.map(item=>{const [historyYear,historyMonth]=item.period.split('-').map(Number);return {label:`${new Intl.DateTimeFormat('en',{month:'short'}).format(new Date(historyYear,historyMonth-1,1))} '${String(historyYear).slice(-2)}`,value:item.balance};});
@@ -251,7 +285,7 @@ export default function FinancePage() {
       <KPI title="Truck EMI" value={money(truckEmi)} />
       <KPI title="Auto EMI" value={money(autoEmi)} />
       <KPI title="Room rent" value={money(roomRent)} />
-      <KPI title="Savings deposit" value={money(savingsDeposit)} />
+      <KPI title="Savings deposited this month" value={money(savingsDepositedThisMonth)} />
       <KPI title="Partner payouts" value={money(partnerPaymentsTotal)} />
       <KPI title="Loan repayments" value={money(loanRepaymentsThisMonth)} />
       <KPI title="Savings balance" value={money(savingsBalance)} />
@@ -278,6 +312,19 @@ export default function FinancePage() {
         {monthlyPaymentRows.length === 0 && <tr><td colSpan={4} className="finance-empty">No payments recorded for this month.</td></tr>}
       </tbody></table></div>
       {editingMonth && <div className="finance-save-row"><span>Monthly balance reduction: <b>{money(monthlyOutflow)}</b></span><button onClick={saveMonthly} disabled={saving}>{saving ? 'Saving...' : 'Save monthly finance'}</button></div>}
+    </section>
+
+    <section className="card form-card finance-section savings-deposits-section">
+      <div className="finance-section-head">
+        <div><h2>Dated savings deposits</h2><p>Add one entry each time you set aside money from sales. Use any cadence: daily, weekly, or monthly.</p></div>
+        <div className="finance-balance"><span>Deposited this month</span><strong>{money(savingsDepositedThisMonth)}</strong></div>
+        <div className="finance-record-actions">{editingSavings ? <><button type="button" className="button secondary" onClick={addSavingsEntry}>+ Add deposit</button><button type="button" className="button secondary" onClick={() => void load()} disabled={savingSavings}>Cancel</button><button type="button" onClick={saveSavings} disabled={savingSavings}>{savingSavings ? 'Saving...' : 'Save deposits'}</button></> : <><button type="button" className="button secondary" onClick={addSavingsEntry}>+ Add deposit</button><button type="button" className="button secondary" onClick={() => setEditingSavings(true)}>Edit deposits</button></>}</div>
+      </div>
+      <div className="table-wrap finance-table-wrap"><table><thead><tr><th>Date</th><th>Note</th><th>Amount saved</th>{editingSavings && <th>Action</th>}</tr></thead><tbody>
+        {editingSavings ? savingsEntries.map((entry, index) => <tr key={`savings-${index}`}><td><input type="date" aria-label={`Savings date ${index + 1}`} min={periodStart} max={periodEnd} value={entry.date} onChange={event => setSavingsEntries(entries => entries.map((item, itemIndex) => itemIndex === index ? { ...item, date: event.target.value } : item))} /></td><td><input aria-label={`Savings note ${index + 1}`} value={entry.note || ''} onChange={event => setSavingsEntries(entries => entries.map((item, itemIndex) => itemIndex === index ? { ...item, note: event.target.value } : item))} /></td><td><input type="number" min="0.01" step="0.01" aria-label={`Savings amount ${index + 1}`} value={entry.amount || ''} onChange={event => setSavingsEntries(entries => entries.map((item, itemIndex) => itemIndex === index ? { ...item, amount: Number(event.target.value) } : item))} /></td><td><button type="button" className="finance-remove" aria-label={`Remove savings entry ${index + 1}`} onClick={() => setSavingsEntries(entries => entries.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></td></tr>) : savingsEntries.map((entry, index) => <tr key={`savings-${index}`}><td>{entry.date}</td><td>{entry.note || 'Savings'}</td><td>{money(entry.amount)}</td></tr>)}
+        {!editingSavings && savingsEntries.length === 0 && <tr><td colSpan={3} className="finance-empty">No dated savings deposits recorded for this month.</td></tr>}
+        {editingSavings && savingsEntries.length === 0 && <tr><td colSpan={4} className="finance-empty">Add a dated entry when you move money into savings.</td></tr>}
+      </tbody></table></div>
     </section>
 
     <div className="grid chart-grid finance-charts">

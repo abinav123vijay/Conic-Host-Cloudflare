@@ -21,7 +21,8 @@ export function calculateBalancesThrough(
     const truckEmi = (entry.truckEmiPaymentDate || periodEnd) <= date ? amount(entry.truckEmi) : 0;
     const autoEmi = (entry.autoEmiPaymentDate || periodEnd) <= date ? amount(entry.autoEmi) : 0;
     const monthEndOutflows = periodEnd <= date ? amount(entry.roomRent) + amount(entry.savingsDeposit) : 0;
-    return salaryPayments + truckEmi + autoEmi + monthEndOutflows;
+    const datedSavings = sum((entry.savingsEntries || []).filter(item => item.date <= date).map(item => amount(item.amount)));
+    return salaryPayments + truckEmi + autoEmi + monthEndOutflows + datedSavings;
   }));
   const loanRepayments = sum(loans.flatMap(loan =>
     (loan.repayments || []).filter(repayment => repayment.date <= date).map(repayment => amount(repayment.amount))
