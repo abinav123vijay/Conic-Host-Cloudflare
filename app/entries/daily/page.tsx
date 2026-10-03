@@ -35,7 +35,7 @@ export default function DailyPage() {
     const [daily, currentSettings, user] = await Promise.all([dailyResponse.json(), settingsResponse.json(), userResponse.ok ? userResponse.json() : null]);
     setRows(daily);
     setSettings(currentSettings);
-    setCanDelete(user?.role === 'owner');
+    setCanDelete(user?.role === 'owner' || user?.role === 'admin');
   };
 
   useEffect(() => { void load(); }, []);

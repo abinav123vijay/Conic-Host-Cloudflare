@@ -26,6 +26,8 @@ export async function POST() {
         dateFormat: 'DD-MMM-YYYY',
         openingOnlineBalance: 0,
         openingCashBalance: 0,
+        truckEmiTotal: 0,
+        autoEmiTotal: 0,
         vendors: DEFAULT_VENDORS,
         expenseCategories: DEFAULT_EXPENSE_CATEGORIES,
         updatedAt: new Date()

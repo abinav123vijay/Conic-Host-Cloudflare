@@ -2,6 +2,7 @@
 
 import './finance.css';
 import './finance-charts.css';
+import './emi-totals.css';
 import { Fragment, useEffect, useState } from 'react';
 import { BarChart, DonutChart, KPI, LineChart } from '@/components/Charts';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -15,7 +16,8 @@ const total = (values: number[]) => values.reduce((sum, value) => sum + Number(v
 
 type FinanceLoanRow = FinanceLoan & { repaid: number; outstanding: number };
 type VendorReturnRow = VendorDefectReturn & { received: number; pending: number };
-type FinanceResponse = { finance: FinanceMonth; isSaved: boolean; savingsBalance: number; savingsHistory: { period: string; balance: number }[]; loans: FinanceLoanRow[]; vendorReturns: VendorReturnRow[] };
+type EmiHistoryRow = { period: string; truckPaymentDate: string; truckEmi: number; autoPaymentDate: string; autoEmi: number };
+type FinanceResponse = { finance: FinanceMonth; isSaved: boolean; savingsBalance: number; savingsHistory: { period: string; balance: number }[]; emiTotals: { truck: number; auto: number }; emiTotalsSaved: boolean; emiPaid: { truck: number; auto: number }; emiHistory: EmiHistoryRow[]; loans: FinanceLoanRow[]; vendorReturns: VendorReturnRow[] };
 type ReturnDraft = { date: string; amount: number };
 type LoanEditDraft = Pick<FinanceLoan, 'person' | 'source' | 'amountTaken' | 'takenDate' | 'notes'> & { repayments: LoanRepayment[] };
 type ReturnEditDraft = Pick<VendorDefectReturn, 'vendor' | 'returnDate' | 'amount' | 'notes'> & { receipts: VendorRefundReceipt[] };
@@ -39,11 +41,18 @@ export default function FinancePage() {
   const [savingsHistory, setSavingsHistory] = useState<{ period: string; balance: number }[]>([]);
   const [truckEmi, setTruckEmi] = useState(0);
   const [truckEmiPaymentDate, setTruckEmiPaymentDate] = useState(monthEndDate(current.getFullYear(), current.getMonth() + 1));
+  const [truckEmiTotal, setTruckEmiTotal] = useState(0);
+  const [truckEmiPaid, setTruckEmiPaid] = useState(0);
+  const [editingEmiTotals, setEditingEmiTotals] = useState(false);
   const [autoEmi, setAutoEmi] = useState(0);
   const [autoEmiPaymentDate, setAutoEmiPaymentDate] = useState(monthEndDate(current.getFullYear(), current.getMonth() + 1));
+  const [autoEmiTotal, setAutoEmiTotal] = useState(0);
+  const [autoEmiPaid, setAutoEmiPaid] = useState(0);
+  const [emiHistory, setEmiHistory] = useState<EmiHistoryRow[]>([]);
   const [roomRent, setRoomRent] = useState(0);
   const [savingsDeposit, setSavingsDeposit] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [savingEmiTotals, setSavingEmiTotals] = useState(false);
   const [savingSavings, setSavingSavings] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -75,8 +84,14 @@ export default function FinancePage() {
     setSavingsEntries(data.finance.savingsEntries || []);
     setTruckEmi(data.finance.truckEmi || 0);
     setTruckEmiPaymentDate(data.finance.truckEmiPaymentDate || periodEnd);
+    setTruckEmiTotal(data.emiTotals.truck || 0);
+    setTruckEmiPaid(data.emiPaid.truck || 0);
+    setEditingEmiTotals(!data.emiTotalsSaved);
     setAutoEmi(data.finance.autoEmi || 0);
     setAutoEmiPaymentDate(data.finance.autoEmiPaymentDate || periodEnd);
+    setAutoEmiTotal(data.emiTotals.auto || 0);
+    setAutoEmiPaid(data.emiPaid.auto || 0);
+    setEmiHistory(data.emiHistory || []);
     setRoomRent(data.finance.roomRent || 0);
     setSavingsDeposit(data.finance.savingsDeposit || 0);
     setSavingsBalance(data.savingsBalance || 0);
@@ -115,6 +130,27 @@ export default function FinancePage() {
       setError(saveError instanceof Error ? saveError.message : 'Could not save monthly finance.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveEmiTotals = async () => {
+    setSavingEmiTotals(true);
+    setError('');
+    try {
+      const response = await fetch('/api/finance/emi-totals', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ truckEmiTotal, autoEmiTotal })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not save EMI totals.');
+      setTruckEmiPaid(result.truckEmiPaid);
+      setAutoEmiPaid(result.autoEmiPaid);
+      await load();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Could not save EMI totals.');
+    } finally {
+      setSavingEmiTotals(false);
     }
   };
 
@@ -253,6 +289,8 @@ export default function FinancePage() {
   const loanOutstanding = total(loans.map(loan => loan.outstanding));
   const vendorCreditsPending = total(vendorReturns.map(item => item.pending));
   const vendorCreditsReceivedThisMonth = total(vendorReturns.flatMap(item => (item.receipts || []).filter(receipt => receipt.date >= periodStart && receipt.date <= periodEnd).map(receipt => receipt.amount)));
+  const truckEmiPending = Math.max(0, truckEmiTotal - truckEmiPaid);
+  const autoEmiPending = Math.max(0, autoEmiTotal - autoEmiPaid);
   const monthlyPaymentRows = [
     ...salaries.filter(item => item.amount > 0).map(item => ({ date: item.paymentDate || periodEnd, type: 'Salary', recipient: item.person || 'Salary', amount: item.amount })),
     { date: truckEmiPaymentDate, type: 'Truck EMI', recipient: 'Truck finance', amount: truckEmi },
@@ -284,6 +322,8 @@ export default function FinancePage() {
       <KPI title="Salary total" value={money(salaryTotal)} />
       <KPI title="Truck EMI" value={money(truckEmi)} />
       <KPI title="Auto EMI" value={money(autoEmi)} />
+      <KPI title="Truck EMI pending" value={money(truckEmiPending)} />
+      <KPI title="Auto EMI pending" value={money(autoEmiPending)} />
       <KPI title="Room rent" value={money(roomRent)} />
       <KPI title="Savings deposited this month" value={money(savingsDepositedThisMonth)} />
       <KPI title="Partner payouts" value={money(partnerPaymentsTotal)} />
@@ -294,18 +334,39 @@ export default function FinancePage() {
       <KPI title="Vendor credits received" value={money(vendorCreditsReceivedThisMonth)} />
     </div>
 
+    <section className="card form-card finance-section emi-totals-section">
+      <div className="finance-section-head"><div><h2>EMI totals</h2><p>Monthly EMI payments recorded below reduce the total obligations.</p></div><div className="finance-record-actions">{editingEmiTotals ? <><button type="button" className="button secondary" onClick={() => void load()} disabled={savingEmiTotals}>Cancel</button><button type="button" onClick={saveEmiTotals} disabled={savingEmiTotals}>{savingEmiTotals ? 'Saving...' : 'Save EMI totals'}</button></> : <button type="button" className="button secondary" onClick={() => setEditingEmiTotals(true)}>Edit EMI totals</button>}</div></div>
+      <div className="finance-grid">
+        {editingEmiTotals ? <label>Total truck EMI<input type="number" min="0" step="0.01" value={truckEmiTotal} onChange={event => setTruckEmiTotal(Number(event.target.value))} /></label> : <div className="emi-total-stat total"><span>Total truck EMI</span><strong>{money(truckEmiTotal)}</strong></div>}
+        <div className="emi-total-stat"><span>Truck EMI paid</span><strong>{money(truckEmiPaid)}</strong></div>
+        <div className="emi-total-stat pending"><span>Truck EMI pending</span><strong>{money(truckEmiPending)}</strong></div>
+        {editingEmiTotals ? <label>Total auto EMI<input type="number" min="0" step="0.01" value={autoEmiTotal} onChange={event => setAutoEmiTotal(Number(event.target.value))} /></label> : <div className="emi-total-stat total"><span>Total auto EMI</span><strong>{money(autoEmiTotal)}</strong></div>}
+        <div className="emi-total-stat"><span>Auto EMI paid</span><strong>{money(autoEmiPaid)}</strong></div>
+        <div className="emi-total-stat pending"><span>Auto EMI pending</span><strong>{money(autoEmiPending)}</strong></div>
+      </div>
+      <div className="finance-payment-heading"><h3>EMI payment history</h3><span>{money(truckEmiPaid + autoEmiPaid)} paid</span></div>
+      <div className="table-wrap finance-table-wrap"><table><thead><tr><th>Month</th><th>Truck payment date</th><th>Truck paid</th><th>Auto payment date</th><th>Auto paid</th><th>Total paid</th></tr></thead><tbody>
+        {emiHistory.map(entry => <tr key={entry.period}><td>{entry.period}</td><td>{entry.truckEmi > 0 ? entry.truckPaymentDate : '—'}</td><td>{entry.truckEmi > 0 ? money(entry.truckEmi) : '—'}</td><td>{entry.autoEmi > 0 ? entry.autoPaymentDate : '—'}</td><td>{entry.autoEmi > 0 ? money(entry.autoEmi) : '—'}</td><td>{money(entry.truckEmi + entry.autoEmi)}</td></tr>)}
+        {emiHistory.length === 0 && <tr><td colSpan={6} className="finance-empty">No EMI payments recorded.</td></tr>}
+      </tbody></table></div>
+    </section>
+
     <section className="card form-card finance-section">
       <div className="finance-section-head"><div><h2>Monthly expenses &amp; savings</h2><p>{year} · {new Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(year, month - 1, 1))}</p></div><div className="finance-record-actions">{editingMonth ? <><button type="button" className="button secondary" onClick={() => void load()} disabled={saving}>Cancel</button><button type="button" onClick={saveMonthly} disabled={saving}>{saving ? 'Saving...' : 'Save monthly finance'}</button></> : <><button type="button" className="button secondary" onClick={() => setEditingMonth(true)} disabled={editingPartnerPayments && isSavedMonth}>Edit month</button><button type="button" className="button secondary finance-delete" onClick={() => { setDeleteError(''); setDeleteTarget({ kind: 'month', label: 'monthly finance record' }); }} disabled={editingPartnerPayments}>Delete month</button></>}</div></div>
       <div className="finance-grid">
-        <label>Truck EMI<input type="number" min="0" disabled={!editingMonth} value={truckEmi} onChange={event => setTruckEmi(Number(event.target.value))} /></label>
-        <label>Truck EMI payment date<input type="date" min={periodStart} max={periodEnd} disabled={!editingMonth} value={truckEmiPaymentDate} onChange={event => setTruckEmiPaymentDate(event.target.value)} /></label>
-        <label>Auto EMI<input type="number" min="0" disabled={!editingMonth} value={autoEmi} onChange={event => setAutoEmi(Number(event.target.value))} /></label>
-        <label>Auto EMI payment date<input type="date" min={periodStart} max={periodEnd} disabled={!editingMonth} value={autoEmiPaymentDate} onChange={event => setAutoEmiPaymentDate(event.target.value)} /></label>
+        {editingMonth && <>
+          <label>Truck EMI<input type="number" min="0" value={truckEmi} onChange={event => setTruckEmi(Number(event.target.value))} /></label>
+          <label>Truck EMI payment date<input type="date" min={periodStart} max={periodEnd} value={truckEmiPaymentDate} onChange={event => setTruckEmiPaymentDate(event.target.value)} /></label>
+          <label>Auto EMI<input type="number" min="0" value={autoEmi} onChange={event => setAutoEmi(Number(event.target.value))} /></label>
+          <label>Auto EMI payment date<input type="date" min={periodStart} max={periodEnd} value={autoEmiPaymentDate} onChange={event => setAutoEmiPaymentDate(event.target.value)} /></label>
+        </>}
         <label>Room rent<input type="number" min="0" disabled={!editingMonth} value={roomRent} onChange={event => setRoomRent(Number(event.target.value))} /></label>
         <label>Savings deposited<input type="number" min="0" disabled={!editingMonth} value={savingsDeposit} onChange={event => setSavingsDeposit(Number(event.target.value))} /></label>
       </div>
-      <div className="finance-list-heading"><h3>Salary paid this month</h3>{editingMonth && <button type="button" className="button secondary" onClick={() => setSalaries(items => [...items, { person: '', amount: 0, paymentDate: monthEndDate(year, month) }])}>+ Add salary</button>}</div>
-      {salaries.length > 0 && <div className="finance-edit-list">{salaries.map((salary, index) => <div className="finance-edit-row finance-salary-row" key={`salary-${index}`}><label>Person<input disabled={!editingMonth} value={salary.person} onChange={event => updateSalary(index, 'person', event.target.value)} /></label><label>Salary amount<input type="number" min="0" disabled={!editingMonth} value={salary.amount} onChange={event => updateSalary(index, 'amount', event.target.value)} /></label><label>Salary payment date<input type="date" min={periodStart} max={periodEnd} disabled={!editingMonth} value={salary.paymentDate || periodEnd} onChange={event => updateSalary(index, 'paymentDate', event.target.value)} /></label>{editingMonth && <button type="button" className="finance-remove" aria-label={`Remove salary ${index + 1}`} onClick={() => setSalaries(items => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>}</div>)}</div>}
+      {editingMonth && <>
+        <div className="finance-list-heading"><h3>Salary paid this month</h3><button type="button" className="button secondary" onClick={() => setSalaries(items => [...items, { person: '', amount: 0, paymentDate: monthEndDate(year, month) }])}>+ Add salary</button></div>
+        {salaries.length > 0 && <div className="finance-edit-list">{salaries.map((salary, index) => <div className="finance-edit-row finance-salary-row" key={`salary-${index}`}><label>Person<input value={salary.person} onChange={event => updateSalary(index, 'person', event.target.value)} /></label><label>Salary amount<input type="number" min="0" value={salary.amount} onChange={event => updateSalary(index, 'amount', event.target.value)} /></label><label>Salary payment date<input type="date" min={periodStart} max={periodEnd} value={salary.paymentDate || periodEnd} onChange={event => updateSalary(index, 'paymentDate', event.target.value)} /></label><button type="button" className="finance-remove" aria-label={`Remove salary ${index + 1}`} onClick={() => setSalaries(items => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}</div>}
+      </>}
       <div className="finance-payment-heading"><h3>Payments this month</h3><span>{money(monthlyOutflow)}</span></div>
       <div className="table-wrap finance-table-wrap"><table><thead><tr><th>Payment date</th><th>Payment</th><th>Paid to</th><th>Amount</th></tr></thead><tbody>
         {monthlyPaymentRows.map((item, index) => <tr key={`${item.type}-${item.recipient}-${index}`}><td>{item.date}</td><td>{item.type}</td><td>{item.recipient}</td><td>{money(item.amount)}</td></tr>)}

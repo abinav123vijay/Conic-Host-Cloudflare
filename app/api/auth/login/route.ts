@@ -7,7 +7,7 @@ type UserRecord = {
   email: string;
   passwordHash?: string;
   businessId: string;
-  role: 'owner' | 'staff' | 'viewer';
+  role: 'admin' | 'owner' | 'staff' | 'viewer';
 };
 
 export async function POST(request: Request) {

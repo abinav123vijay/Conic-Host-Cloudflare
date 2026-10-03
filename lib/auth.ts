@@ -9,7 +9,7 @@ export type AuthUser = {
   id: string;
   email: string;
   businessId: string;
-  role: 'owner' | 'staff' | 'viewer';
+  role: 'admin' | 'owner' | 'staff' | 'viewer';
 };
 
 type Session = AuthUser & { expiresAt: number };
@@ -54,7 +54,7 @@ export function readSessionToken(token: string | undefined): AuthUser | null {
     const received = Buffer.from(signature);
     if (expected.length !== received.length || !timingSafeEqual(expected, received)) return null;
     const session = JSON.parse(Buffer.from(encoded, 'base64url').toString()) as Session;
-    if (!session.id || !session.email || !session.businessId || !session.role || session.expiresAt <= Math.floor(Date.now() / 1000)) return null;
+    if (!session.id || !session.email || !session.businessId || !['admin', 'owner', 'staff', 'viewer'].includes(session.role) || session.expiresAt <= Math.floor(Date.now() / 1000)) return null;
     return { id: session.id, email: session.email, businessId: session.businessId, role: session.role };
   } catch {
     return null;

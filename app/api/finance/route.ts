@@ -25,11 +25,12 @@ export async function GET(request: NextRequest) {
   const [year, month] = period.split('-').map(Number);
   const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
   const db = await getDb();
-  const [finance, financeHistory, loans, vendorReturns] = await Promise.all([
+  const [finance, financeHistory, loans, vendorReturns, business] = await Promise.all([
     db.collection<FinanceMonth>('monthlyFinance').findOne({ businessId: BUSINESS_ID, period }),
     db.collection<FinanceMonth>('monthlyFinance').find({ businessId: BUSINESS_ID }).sort({ period: 1 }).toArray(),
     db.collection('financeLoans').find({ businessId: BUSINESS_ID }).sort({ takenDate: -1 }).toArray(),
-    db.collection('vendorDefectReturns').find({ businessId: BUSINESS_ID }).sort({ returnDate: -1 }).toArray()
+    db.collection('vendorDefectReturns').find({ businessId: BUSINESS_ID }).sort({ returnDate: -1 }).toArray(),
+    db.collection<{ _id: string; truckEmiTotal?: number; autoEmiTotal?: number }>('businesses').findOne({ _id: BUSINESS_ID })
   ]);
   const savingsBalance = savingsBalanceThrough(financeHistory);
   let savingsRunningBalance=0;
@@ -42,6 +43,23 @@ export async function GET(request: NextRequest) {
     isSaved: Boolean(finance),
     savingsBalance,
     savingsHistory,
+    emiTotals: { truck: Number(business?.truckEmiTotal || 0), auto: Number(business?.autoEmiTotal || 0) },
+    emiTotalsSaved: business?.truckEmiTotal !== undefined || business?.autoEmiTotal !== undefined,
+    emiPaid: {
+      truck: sum(financeHistory.map(item => Number(item.truckEmi || 0))),
+      auto: sum(financeHistory.map(item => Number(item.autoEmi || 0)))
+    },
+    emiHistory: financeHistory.filter(item => Number(item.truckEmi || 0) > 0 || Number(item.autoEmi || 0) > 0).map(item => {
+      const [historyYear, historyMonth] = item.period.split('-').map(Number);
+      const historyMonthEnd = new Date(Date.UTC(historyYear, historyMonth, 0)).toISOString().slice(0, 10);
+      return {
+        period: item.period,
+        truckPaymentDate: item.truckEmiPaymentDate || historyMonthEnd,
+        truckEmi: Number(item.truckEmi || 0),
+        autoPaymentDate: item.autoEmiPaymentDate || historyMonthEnd,
+        autoEmi: Number(item.autoEmi || 0)
+      };
+    }),
     loans: loans.map(loan => ({ ...loan, repaid: sum((loan.repayments || []).map((entry: { amount: number }) => Number(entry.amount || 0))), outstanding: Math.max(0, Number(loan.amountTaken || 0) - sum((loan.repayments || []).map((entry: { amount: number }) => Number(entry.amount || 0)))) })),
     vendorReturns: vendorReturns.map(item => ({ ...item, received: sum((item.receipts || []).map((entry: { amount: number }) => Number(entry.amount || 0))), pending: Math.max(0, Number(item.amount || 0) - sum((item.receipts || []).map((entry: { amount: number }) => Number(entry.amount || 0)))) }))
   });

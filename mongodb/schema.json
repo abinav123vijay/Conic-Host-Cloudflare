@@ -33,6 +33,14 @@
           "openingCashBalance": {
             "bsonType": "number"
           },
+          "truckEmiTotal": {
+            "bsonType": "number",
+            "minimum": 0
+          },
+          "autoEmiTotal": {
+            "bsonType": "number",
+            "minimum": 0
+          },
           "vendors": {
             "bsonType": "array",
             "items": {
@@ -256,6 +264,7 @@
           },
           "role": {
             "enum": [
+              "admin",
               "owner",
               "staff",
               "viewer"
