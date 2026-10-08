@@ -6,6 +6,7 @@ import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 import { buildWorkbookFromData } from '../lib/excel/export';
 import { parseConicWorkbook } from '../lib/excel/parse';
+import { calculateBalancesThrough } from '../lib/finance/balances';
 import type { BusinessSettings, DailyEntry, FinanceLoan, FinanceMonth, PurchaseEntry, VendorDefectReturn } from '../types/domain';
 
 const businessId = 'excel-test-business';
@@ -218,6 +219,47 @@ test('export/import round trip retains daily entries, purchases, savings, loans 
   assert.deepEqual(october?.partnerPayments, [{ partner: 'Partner', amount: 50, paymentDate: '2026-10-08' }]);
   assert.equal(parsed.financeLoans[0].repayments[0].amount, 10);
   assert.equal(parsed.vendorDefectReturns[0].receipts[0].amount, 35);
+});
+
+test('end-to-end ledger balances and reconciliation values agree with the exported workbook', async () => {
+  const closing = calculateBalancesThrough(
+    '2026-10-31',
+    daily,
+    purchases,
+    { online: settings.openingOnlineBalance, cash: settings.openingCashBalance },
+    monthlyFinance,
+    vendorReturns,
+    loans
+  );
+  const output = await buildWorkbookFromData(fs.readFileSync(templatePath), daily, purchases, settings, {
+    months: monthlyFinance,
+    loans,
+    vendorReturns,
+    reconciliations: [{
+      date: '2026-10-31',
+      bookOnline: closing.online,
+      bookCash: closing.cash,
+      actualOnline: closing.online,
+      actualCash: closing.cash,
+      varianceOnline: 0,
+      varianceCash: 0
+    }]
+  });
+  const workbook = XLSX.read(output, { type: 'buffer' });
+  const analytics = workbook.Sheets.Analytics;
+  const rows = XLSX.utils.sheet_to_json<Array<string | number>>(analytics, { header: 1, raw: true });
+  assert.equal(cell(analytics, 'F5'), closing.online);
+  assert.equal(cell(analytics, 'F6'), closing.cash);
+  assert.equal(cell(analytics, 'F7'), closing.total);
+
+  const reconciliationTitle = findRow(rows, 'RECONCILIATION CHECK');
+  const reconciliationRows = rows.slice(reconciliationTitle + 2);
+  assert.deepEqual(reconciliationRows.find(row => row[0] === 'Online')?.slice(0, 5), [
+    'Online', closing.online, closing.online, 0, 'MATCH'
+  ]);
+  assert.deepEqual(reconciliationRows.find(row => row[0] === 'Cash')?.slice(0, 5), [
+    'Cash', closing.cash, closing.cash, 0, 'MATCH'
+  ]);
 });
 
 test('Excel import reports a missing required worksheet instead of returning empty data', () => {

@@ -105,3 +105,55 @@ test('balance date validation rejects impossible and malformed dates', () => {
   assert.equal(isValidBalanceDate('08-10-2026'), false);
   assert.equal(isValidBalanceDate(''), false);
 });
+
+test('as-of balances include transactions on the selected date and exclude future activity', () => {
+  const datedDaily: DailyEntry[] = [
+    {
+      businessId: 'test',
+      date: '2026-10-08',
+      onlineSales: 80,
+      cashSales: 40,
+      expenses: {},
+      expensePaidOnline: 10,
+      expensePaidCash: 5,
+      notes: ''
+    },
+    {
+      businessId: 'test',
+      date: '2026-10-09',
+      onlineSales: 500,
+      cashSales: 600,
+      expenses: {},
+      expensePaidOnline: 0,
+      expensePaidCash: 0,
+      notes: ''
+    }
+  ];
+  const datedPurchases: PurchaseEntry[] = [
+    {
+      businessId: 'test',
+      purchaseDate: '2026-10-08',
+      paymentDate: null,
+      vendorAmounts: { VendorA: 50 },
+      onlinePurchasePaid: 30,
+      cashPurchasePaid: 20
+    },
+    {
+      businessId: 'test',
+      purchaseDate: '2026-10-08',
+      paymentDate: '2026-10-09',
+      vendorAmounts: { VendorB: 90 },
+      onlinePurchasePaid: 40,
+      cashPurchasePaid: 50
+    }
+  ];
+
+  assert.deepEqual(
+    calculateBalancesThrough('2026-10-08', datedDaily, datedPurchases, { online: 100, cash: 50 }),
+    { online: 140, cash: 65, total: 205 }
+  );
+  assert.deepEqual(
+    calculateBalancesThrough('2026-10-09', datedDaily, datedPurchases, { online: 100, cash: 50 }),
+    { online: 600, cash: 615, total: 1215 }
+  );
+});
