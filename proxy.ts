@@ -24,23 +24,36 @@ export function proxy(request: NextRequest) {
   const isApi = pathname.startsWith('/api/');
   const isEntryPage = pathname.startsWith('/entries/daily') || pathname.startsWith('/entries/purchases');
   const isEntryApi = pathname.startsWith('/api/daily') || pathname.startsWith('/api/purchases');
-  const isEntryDelete = isEntryApi && request.method === 'DELETE';
   const isSettingsRead = pathname === '/api/settings' && request.method === 'GET';
-  const isOwnerOnly = pathname === '/' || pathname.startsWith('/overview') || pathname.startsWith('/dashboard') || pathname.startsWith('/settings') || pathname.startsWith('/import-export') || (isApi && !isEntryApi && !isSettingsRead);
+  const isOwnerOnlyPage = pathname.startsWith('/finance') || pathname.startsWith('/settings') || pathname.startsWith('/dashboard/reconciliation');
+  const isOwnerOnlyApi = pathname.startsWith('/api/finance') || pathname.startsWith('/api/settings') || pathname.startsWith('/api/reconciliation');
+  const isAdminPage = pathname === '/' || pathname.startsWith('/overview') || pathname.startsWith('/dashboard') || pathname.startsWith('/import-export');
+  const isAdminApi = isApi && !isEntryApi && !isSettingsRead && !isOwnerOnlyApi;
 
   if (session.role === 'owner') {
     if (pathname === '/') return NextResponse.redirect(new URL('/dashboard/monthly', request.url));
     return NextResponse.next();
   }
 
+  if (session.role === 'admin') {
+    if (isOwnerOnlyPage || isOwnerOnlyApi) {
+      if (isApi) return NextResponse.json({ error: 'This section is available to owners only.' }, { status: 403 });
+      return NextResponse.redirect(new URL('/overview?access=restricted', request.url));
+    }
+    if (pathname === '/') return NextResponse.redirect(new URL('/overview', request.url));
+    if (isEntryPage || isEntryApi || isSettingsRead || isAdminPage || isAdminApi) return NextResponse.next();
+    if (isApi) return NextResponse.json({ error: 'This account does not have access to this resource.' }, { status: 403 });
+    return NextResponse.redirect(new URL('/overview?access=restricted', request.url));
+  }
+
   if (session.role === 'staff') {
     if (pathname === '/') return NextResponse.redirect(new URL('/entries/daily', request.url));
-    if (isEntryDelete) return NextResponse.json({ error: 'Only owners can delete entries.' }, { status: 403 });
+    if (isEntryApi && request.method === 'DELETE') return NextResponse.json({ error: 'Only admins and owners can delete entries.' }, { status: 403 });
     if (isEntryPage || isEntryApi || isSettingsRead) return NextResponse.next();
     if (isApi) {
-      return NextResponse.json({ error: 'This action is available to owners only.' }, { status: 403 });
+      return NextResponse.json({ error: 'This action is not available to staff.' }, { status: 403 });
     }
-    if (isOwnerOnly) return NextResponse.redirect(new URL('/entries/daily', request.url));
+    return NextResponse.redirect(new URL('/entries/daily', request.url));
   }
 
   if (isApi) {
@@ -50,5 +63,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/overview/:path*', '/dashboard/:path*', '/entries/:path*', '/settings/:path*', '/import-export/:path*', '/api/:path*']
+  matcher: ['/', '/overview/:path*', '/dashboard/:path*', '/finance/:path*', '/entries/:path*', '/settings/:path*', '/import-export/:path*', '/api/:path*']
 };

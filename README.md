@@ -15,10 +15,14 @@ The MongoDB/Next.js integration follows MongoDB's official Next.js pattern: a sh
 
 ## Pages
 
-- `/dashboard/monthly` — monthly KPIs and analytics charts
+- Detailed functionality, source-file map, data flow, and balance rules: [FUNCTIONALITY_README.md](./FUNCTIONALITY_README.md)
+- `/overview` — performance dashboard with monthly finance/loan summary and reconciliation warnings
+- `/dashboard/monthly` — monthly KPIs, balance-as-of lookup, balance movement and analytics charts
 - `/dashboard/yearly` — January–December table and trend charts
+- `/dashboard/reconciliation` — compare verified bank and cash balances with recorded balances for a selected date; Overview warns when today is unreconciled or saved checks have differences
 - `/entries/daily` — daily sales and expense entry
 - `/entries/purchases` — weekly/vendor purchase entry and payment tracking
+- `/finance` — monthly salary, EMI, rent, savings, partner payouts, loans and vendor defect refunds (owner only)
 - `/settings` — opening balances, vendor master, expense categories
 - `/import-export` — Excel import/export bridge
 - `/api/health` — MongoDB connection check
@@ -28,6 +32,10 @@ The MongoDB/Next.js integration follows MongoDB's official Next.js pattern: a sh
 - `businesses`
 - `dailyEntries`
 - `purchaseEntries`
+- `monthlyFinance`
+- `financeLoans`
+- `vendorDefectReturns`
+- `accountReconciliations`
 - `users`
 - `auditLogs`
 
@@ -41,9 +49,13 @@ See `mongodb/schema.json` for the MongoDB validators and indexes.
 - Purchase payment can be online or cash.
 - A blank purchase payment date is treated as the purchase date for balance calculations.
 - Pending purchase = total purchase - online paid - cash paid.
-- Online/cash closing balances include sales, expense payments and purchase payments.
+- Online/cash closing balances include their respective sales, daily expense payments, and purchase payments.
+- Salaries, truck/auto EMIs, room rent, savings deposits, and loan repayments reduce the online balance; cash-paid daily expenses and purchases reduce the cash balance.
+- Borrowed loan amounts are tracked as liabilities, not available balance. Partner payouts reduce the savings ledger, not the operating balance.
+- Vendor defect-return credits increase total balance only when receipts are recorded; pending credits remain separate.
 - Monthly balances roll forward automatically.
 - Yearly dashboard is the sum of the twelve monthly periods for the selected year.
+- Account reconciliations save verified online/cash balances, calculated balances, and any difference by date.
 
 ## Excel round trip
 
@@ -54,12 +66,13 @@ See `mongodb/schema.json` for the MongoDB validators and indexes.
 - Settings
 - Daily Sales & Expenses
 - Weekly Purchases
+- Additional Finance & Liabilities
 
 The imported data replaces the current business dataset for the configured `CONIC_BUSINESS_ID`.
 
 ### MongoDB → Excel
 
-`Export Excel Workbook` starts from `data/templates/CONIC_Business_Tracker.xlsx` (your current CONIC workbook) and writes the latest database data into it. The template is kept so the export remains compatible with the existing workbook layout, formulas and chart package.
+`Export Excel Workbook` starts from `data/templates/CONIC_Business_Tracker.xlsx` and writes all current database data into it. In addition to the Monthly Dashboard and Yearly Dashboard (with their embedded charts), each export includes a separate Analytics worksheet with sales-to-purchases, sales-to-expenses, and net-margin ratios beside current online/cash/total balances and pending purchases. It also compares the selected month with the previous month, splits paid expense outflows (daily expenses, finance payments, and loan repayments) by online/cash source, ranks the top ten vendors by purchase amount and share, and shows year-to-date totals. Savings deposits, dated deposits, current savings, and partner payouts are grouped in their own savings section, not repeated in the monthly finance summary. Purchase payments are shown separately from expenses. Owners also see the latest saved reconciliation at or before the selected month-end, including verified/book balances and variances. The expense analysis lists each used daily-expense category with its amount and share of daily expenses. Detailed monthly finance, vendor breakdowns, January–December results, annual totals, and charts for sales mix, expense/vendor breakdowns, annual totals, and yearly trends remain available below. The dashboards open on the latest month and year containing records, with refreshed formula and chart caches so totals and analytics are visible immediately. The export includes formulas in the daily and purchase entry tables (including their blank input rows). Finance payment dates and dated savings entries are retained for import/export round trips.
 
 ## Setup
 
@@ -71,7 +84,9 @@ MONGODB_URI=mongodb+srv://...
 MONGODB_DB=conic
 CONIC_BUSINESS_ID=conic-main
 AUTH_SESSION_SECRET=long-random-secret-value
-AUTH_SIGNUP_CODE=private-invite-code
+AUTH_SIGNUP_CODE=private-staff-invite-code
+AUTH_ADMIN_SIGNUP_CODE=private-admin-invite-code
+AUTH_OWNER_SIGNUP_CODE=private-owner-invite-code
 ```
 
 3. Install packages:
@@ -102,13 +117,13 @@ npm run dev
 
 ## Production next step
 
-Authentication now uses the `users` collection and signed sessions. The app remains configured for one business; new invited accounts receive the `staff` role for `CONIC_BUSINESS_ID`.
+Authentication now uses the `users` collection and signed sessions. The app remains configured for one business. Invite codes assign one of three roles: Admin can use dashboards, daily sales, purchases and Excel tools but not Finance, Settings, or Account Reconciliation; Owner has full access; Staff can use daily sales and purchases only. Finance and loan summaries, reconciliation pages, alerts, and APIs are Owner-only.
 
 ## Sign-in
 
 The `users` collection authenticates users by email and a salted scrypt password hash. Set `AUTH_SESSION_SECRET` in `.env.local` to a cryptographically random value of at least 32 characters and restart Next.js. If it is omitted, the app derives the session-signing key from `MONGODB_URI`; rotating the database URI then invalidates existing sessions. Initialize the updated MongoDB schema with `npm run db:init`.
 
-To enable invited sign-up, set a private `AUTH_SIGNUP_CODE` in `.env.local` and restart Next.js. Share that code only with intended users. Registration creates a staff account for `CONIC_BUSINESS_ID`; sign-up remains disabled when no code is configured.
+To enable invited sign-up, configure one or more distinct invite codes in `.env.local` and restart Next.js. `AUTH_SIGNUP_CODE` creates Staff, `AUTH_ADMIN_SIGNUP_CODE` creates Admin, and `AUTH_OWNER_SIGNUP_CODE` creates Owner. Share each code only with people intended to receive that role. Sign-up remains disabled if none are configured.
 
 To set a password for an existing user, set `AUTH_SETUP_EMAIL` and `AUTH_SETUP_PASSWORD` in the current terminal (use a password of at least 12 characters), then run `npm run auth:set-password`. The script updates only that user's password hash; it does not create a user or change their business/role. Clear both terminal variables after it completes. Do not store or send plaintext passwords in chat.
 

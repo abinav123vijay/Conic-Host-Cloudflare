@@ -39,8 +39,9 @@ async function main() {
         }
       }
 
-      for (const idx of def.indexes || []) {
-        await db.collection(name).createIndex(idx);
+      for (const index of def.indexes || []) {
+        const { key, options } = index.key ? index : { key: index, options: undefined };
+        await db.collection(name).createIndex(key, options);
       }
     }
 

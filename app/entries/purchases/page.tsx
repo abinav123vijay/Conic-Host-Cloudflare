@@ -32,7 +32,7 @@ export default function PurchasesPage() {
     const [purchases, settings, user] = await Promise.all([purchasesResponse.json(), settingsResponse.json(), userResponse.ok ? userResponse.json() : null]);
     setRows(purchases);
     setVendors(settings.vendors || []);
-    setCanDelete(user?.role === 'owner');
+    setCanDelete(user?.role === 'owner' || user?.role === 'admin');
   };
 
   useEffect(() => { void load(); }, []);

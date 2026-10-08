@@ -16,6 +16,6 @@ export default function SignupPage() {
       <SignupForm />
       <p className="auth-switch">Already registered? <Link href="/login">Sign in</Link></p>
     </section>
-    <footer className="login-footer">An administrator invite code is required. New accounts join as staff.</footer>
+    <footer className="login-footer">An invite code is required. Your code determines your workspace access.</footer>
   </main>;
 }
