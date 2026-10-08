@@ -11,7 +11,13 @@ export async function POST(request: Request) {
   const file = form.get('file');
   if (!(file instanceof File)) return NextResponse.json({ error: 'Excel file is required' }, { status: 400 });
 
-  const parsed = parseConicWorkbook(Buffer.from(await file.arrayBuffer()), BUSINESS_ID);
+  let parsed: ReturnType<typeof parseConicWorkbook>;
+  try {
+    parsed = parseConicWorkbook(Buffer.from(await file.arrayBuffer()), BUSINESS_ID);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'The workbook could not be read.';
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
   const db = await getDb();
   const now = new Date();
   await db.collection<BusinessRecord>('businesses').updateOne(

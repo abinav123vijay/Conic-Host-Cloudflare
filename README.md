@@ -135,7 +135,7 @@ Run the automated unit and workflow tests with:
 npm test
 ```
 
-The `tests/` folder covers owner-only API access, reconciliation mismatches, date-effective balance calculations, monthly finance save/retrieve behavior, Excel import validation and round trips, and an end-to-end ledger-to-Analytics export check. Tests use synthetic records and an in-memory MongoDB stand-in; they do not connect to or modify a configured database.
+The `tests/` folder covers API add/edit/delete workflows for daily sales and expenses, purchases, monthly finance and EMI totals, loans and repayments, vendor returns and receipts, plus reconciliation create/update/retrieve behavior. It checks account balances after changes, malformed and over-limit input, cross-business isolation, and that invalid Excel imports leave existing records untouched. A client-side daily-entry test exercises add/edit/confirmed-delete interactions with stubbed API responses; a separate HTTP integration test starts an isolated Next.js server to verify authentication and owner-role middleware. The remaining domain and workbook tests use synthetic records and an in-memory MongoDB stand-in; none of the tests connect to or modify a configured database.
 
 ## Environment file note
 

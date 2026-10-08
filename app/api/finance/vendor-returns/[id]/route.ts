@@ -1,11 +1,10 @@
 import { ObjectId } from 'mongodb';
 import { NextResponse } from 'next/server';
 import { BUSINESS_ID } from '@/lib/constants';
+import { isValidBalanceDate } from '@/lib/dashboard/balance-as-of';
 import { getDb } from '@/lib/mongodb';
 
 type Context = { params: Promise<{ id: string }> };
-
-const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
 export async function PUT(request: Request, context: Context) {
   const { id } = await context.params;
@@ -18,7 +17,7 @@ export async function PUT(request: Request, context: Context) {
   const amount = Number(body.amount);
   const receipts = Array.isArray(body.receipts) ? body.receipts.map((item: any) => ({ date: String(item.date || ''), amount: Number(item.amount) })) : [];
   const received = receipts.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
-  if (!vendor || !isDate(returnDate) || !Number.isFinite(amount) || amount <= 0 || receipts.some((item: { date: string; amount: number }) => !isDate(item.date) || !Number.isFinite(item.amount) || item.amount <= 0) || received > amount) {
+  if (!vendor || !isValidBalanceDate(returnDate) || !Number.isFinite(amount) || amount <= 0 || receipts.some((item: { date: string; amount: number }) => !isValidBalanceDate(item.date) || !Number.isFinite(item.amount) || item.amount <= 0) || received > amount) {
     return NextResponse.json({ error: 'Enter valid return details. Receipts must be positive and cannot exceed the refund due.' }, { status: 400 });
   }
 
@@ -45,7 +44,7 @@ export async function POST(request: Request, context: Context) {
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid receipt data.' }, { status: 400 }); }
   const date = String(body.date || '');
   const receiptAmount = Number(body.amount);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(receiptAmount) || receiptAmount <= 0) return NextResponse.json({ error: 'Enter a valid receipt date and positive amount.' }, { status: 400 });
+  if (!isValidBalanceDate(date) || !Number.isFinite(receiptAmount) || receiptAmount <= 0) return NextResponse.json({ error: 'Enter a valid receipt date and positive amount.' }, { status: 400 });
   const db = await getDb();
   const returns = db.collection('vendorDefectReturns');
   const record = await returns.findOne({ _id: new ObjectId(id), businessId: BUSINESS_ID });
