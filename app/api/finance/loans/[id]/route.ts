@@ -1,11 +1,10 @@
 import { ObjectId } from 'mongodb';
 import { NextResponse } from 'next/server';
 import { BUSINESS_ID } from '@/lib/constants';
+import { isValidBalanceDate } from '@/lib/dashboard/balance-as-of';
 import { getDb } from '@/lib/mongodb';
 
 type Context = { params: Promise<{ id: string }> };
-
-const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
 export async function PUT(request: Request, context: Context) {
   const { id } = await context.params;
@@ -19,7 +18,7 @@ export async function PUT(request: Request, context: Context) {
   const takenDate = String(body.takenDate || '');
   const repayments = Array.isArray(body.repayments) ? body.repayments.map((item: any) => ({ date: String(item.date || ''), amount: Number(item.amount) })) : [];
   const repaid = repayments.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0);
-  if (!person || !['friend', 'partner', 'other'].includes(source) || !Number.isFinite(amountTaken) || amountTaken <= 0 || !isDate(takenDate) || repayments.some((item: { date: string; amount: number }) => !isDate(item.date) || !Number.isFinite(item.amount) || item.amount <= 0) || repaid > amountTaken) {
+  if (!person || !['friend', 'partner', 'other'].includes(source) || !Number.isFinite(amountTaken) || amountTaken <= 0 || !isValidBalanceDate(takenDate) || repayments.some((item: { date: string; amount: number }) => !isValidBalanceDate(item.date) || !Number.isFinite(item.amount) || item.amount <= 0) || repaid > amountTaken) {
     return NextResponse.json({ error: 'Enter valid loan details. Repayments must be positive and cannot exceed the borrowed amount.' }, { status: 400 });
   }
 
@@ -46,7 +45,7 @@ export async function POST(request: Request, context: Context) {
   try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid repayment data.' }, { status: 400 }); }
   const date = String(body.date || '');
   const repaymentAmount = Number(body.amount);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(repaymentAmount) || repaymentAmount <= 0) return NextResponse.json({ error: 'Enter a valid repayment date and positive amount.' }, { status: 400 });
+  if (!isValidBalanceDate(date) || !Number.isFinite(repaymentAmount) || repaymentAmount <= 0) return NextResponse.json({ error: 'Enter a valid repayment date and positive amount.' }, { status: 400 });
   const db = await getDb();
   const loans = db.collection('financeLoans');
   const loan = await loans.findOne({ _id: new ObjectId(id), businessId: BUSINESS_ID });

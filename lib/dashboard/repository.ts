@@ -12,10 +12,19 @@ export async function listDaily() {
 export async function upsertDaily(payload: Omit<DailyEntry, '_id'|'businessId'|'createdAt'|'updatedAt'>, id?: string) {
   const db = await getDb(); const now = new Date();
   const doc = { ...payload, businessId: BUSINESS_ID, updatedAt: now };
-  if (id) { await db.collection('dailyEntries').updateOne({ _id: new ObjectId(id), businessId: BUSINESS_ID }, { $set: doc, $setOnInsert: { createdAt: now } }, { upsert: true }); return id; }
+  if (id) {
+    if (!ObjectId.isValid(id)) return null;
+    const result = await db.collection('dailyEntries').updateOne({ _id: new ObjectId(id), businessId: BUSINESS_ID }, { $set: doc });
+    return result.matchedCount ? id : null;
+  }
   const result = await db.collection('dailyEntries').insertOne({ ...doc, createdAt: now }); return result.insertedId.toString();
 }
-export async function deleteDaily(id: string) { const db = await getDb(); await db.collection('dailyEntries').deleteOne({ _id: new ObjectId(id), businessId: BUSINESS_ID }); }
+export async function deleteDaily(id: string) {
+  if (!ObjectId.isValid(id)) return false;
+  const db = await getDb();
+  const result = await db.collection('dailyEntries').deleteOne({ _id: new ObjectId(id), businessId: BUSINESS_ID });
+  return result.deletedCount > 0;
+}
 
 export async function listPurchases() {
   const db = await getDb();
@@ -24,7 +33,16 @@ export async function listPurchases() {
 export async function upsertPurchase(payload: Omit<PurchaseEntry, '_id'|'businessId'|'createdAt'|'updatedAt'>, id?: string) {
   const db = await getDb(); const now = new Date();
   const doc = { ...payload, businessId: BUSINESS_ID, paymentDate: clean(payload.paymentDate) || null, updatedAt: now };
-  if (id) { await db.collection('purchaseEntries').updateOne({ _id: new ObjectId(id), businessId: BUSINESS_ID }, { $set: doc }, { upsert: true }); return id; }
+  if (id) {
+    if (!ObjectId.isValid(id)) return null;
+    const result = await db.collection('purchaseEntries').updateOne({ _id: new ObjectId(id), businessId: BUSINESS_ID }, { $set: doc });
+    return result.matchedCount ? id : null;
+  }
   const result = await db.collection('purchaseEntries').insertOne({ ...doc, createdAt: now }); return result.insertedId.toString();
 }
-export async function deletePurchase(id: string) { const db = await getDb(); await db.collection('purchaseEntries').deleteOne({ _id: new ObjectId(id), businessId: BUSINESS_ID }); }
+export async function deletePurchase(id: string) {
+  if (!ObjectId.isValid(id)) return false;
+  const db = await getDb();
+  const result = await db.collection('purchaseEntries').deleteOne({ _id: new ObjectId(id), businessId: BUSINESS_ID });
+  return result.deletedCount > 0;
+}

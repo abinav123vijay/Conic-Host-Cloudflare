@@ -127,6 +127,16 @@ To enable invited sign-up, configure one or more distinct invite codes in `.env.
 
 To set a password for an existing user, set `AUTH_SETUP_EMAIL` and `AUTH_SETUP_PASSWORD` in the current terminal (use a password of at least 12 characters), then run `npm run auth:set-password`. The script updates only that user's password hash; it does not create a user or change their business/role. Clear both terminal variables after it completes. Do not store or send plaintext passwords in chat.
 
+## Tests
+
+Run the automated unit and workflow tests with:
+
+```bash
+npm test
+```
+
+The `tests/` folder covers API add/edit/delete workflows for daily sales and expenses, purchases, monthly finance and EMI totals, loans and repayments, vendor returns and receipts, plus reconciliation create/update/retrieve behavior. It checks account balances after changes, malformed and over-limit input, cross-business isolation, and that invalid Excel imports leave existing records untouched. A client-side daily-entry test exercises add/edit/confirmed-delete interactions with stubbed API responses; a separate HTTP integration test starts an isolated Next.js server to verify authentication and owner-role middleware. The remaining domain and workbook tests use synthetic records and an in-memory MongoDB stand-in; none of the tests connect to or modify a configured database.
+
 ## Environment file note
 
 Next.js automatically loads `.env.local` for the web app. The standalone TypeScript scripts also load it explicitly through `scripts/load-env.ts`, so `npm run db:init` and `npm run seed` work immediately after the `.env.local` file is created.

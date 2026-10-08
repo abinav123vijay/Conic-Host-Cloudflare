@@ -7,9 +7,10 @@ import type { Route } from 'next';
 
 const ownerLinks=[
   ['/overview','Overview'],
-  ['/dashboard/monthly','Monthly Dashboard'],['/dashboard/yearly','Yearly Dashboard'],['/dashboard/reconciliation','Account Reconciliation'],
+  ['/dashboard/monthly','Monthly Dashboard'],['/dashboard/yearly','Yearly Dashboard'],
   ['/entries/daily','Daily Sales & Expenses'],['/entries/purchases','Weekly Purchases'],
-  ['/finance','Finance'],['/settings','Settings'],['/import-export','Excel Import / Export']
+  ['/finance','Finance'],['/dashboard/reconciliation','Account Reconciliation'],
+  ['/settings','Settings'],['/import-export','Excel Import / Export']
 ] as const;
 const adminLinks=[
   ['/overview','Overview'],

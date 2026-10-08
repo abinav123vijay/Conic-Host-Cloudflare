@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { BUSINESS_ID } from '@/lib/constants';
+import { isValidBalanceDate } from '@/lib/dashboard/balance-as-of';
 import { getDb } from '@/lib/mongodb';
 
 export async function POST(request: Request) {
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
   const alreadyRepaid = body.alreadyRepaid === undefined || body.alreadyRepaid === '' ? 0 : Number(body.alreadyRepaid);
   const repaymentDate = String(body.repaymentDate || '');
   const takenDate = String(body.takenDate || '');
-  if (!person || !['friend', 'partner', 'other'].includes(String(source)) || !Number.isFinite(amountTaken) || amountTaken <= 0 || !Number.isFinite(alreadyRepaid) || alreadyRepaid < 0 || alreadyRepaid > amountTaken || !/^\d{4}-\d{2}-\d{2}$/.test(takenDate) || (alreadyRepaid > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(repaymentDate))) {
+  if (!person || !['friend', 'partner', 'other'].includes(String(source)) || !Number.isFinite(amountTaken) || amountTaken <= 0 || !Number.isFinite(alreadyRepaid) || alreadyRepaid < 0 || alreadyRepaid > amountTaken || !isValidBalanceDate(takenDate) || (alreadyRepaid > 0 && !isValidBalanceDate(repaymentDate))) {
     return NextResponse.json({ error: 'Enter a valid loan amount, initial repayment, person, source, and dates. Repayment cannot exceed the borrowed amount.' }, { status: 400 });
   }
   const db = await getDb();
