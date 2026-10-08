@@ -106,7 +106,7 @@ export type MonthlyDashboard = {
   purchaseRelatedExpenses: { other: number; transport: number; total: number; purchaseOutflow: number };
   purchaseStatus: { paid: number; pending: number };
   opening: { online: number; cash: number };
-  financeSummary: MonthlyFinanceSummary;
+  financeSummary?: MonthlyFinanceSummary;
 };
 
 export type YearlyMonth = {

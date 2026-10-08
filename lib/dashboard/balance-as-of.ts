@@ -36,5 +36,5 @@ export async function getBalanceAsOf(date: string) {
     vendorReturns,
     loans
   );
-  return { online: balances.online, cash: balances.cash, total: balances.online + balances.cash };
+  return { online: balances.online, cash: balances.cash, total: balances.total };
 }

@@ -7,7 +7,21 @@ import { calculateBalancesThrough as balanceThrough } from '@/lib/finance/balanc
 import { BUSINESS_ID, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_VENDORS, MONTHS } from '@/lib/constants';
 import type { BusinessSettings, DailyEntry, FinanceLoan, FinanceMonth, PurchaseEntry, VendorDefectReturn } from '@/types/domain';
 
-type AdditionalFinanceData = { months?: FinanceMonth[]; loans?: FinanceLoan[]; vendorReturns?: VendorDefectReturn[] };
+type ReconciliationExport = {
+  date: string;
+  bookOnline: number;
+  bookCash: number;
+  actualOnline: number;
+  actualCash: number;
+  varianceOnline: number;
+  varianceCash: number;
+};
+type AdditionalFinanceData = {
+  months?: FinanceMonth[];
+  loans?: FinanceLoan[];
+  vendorReturns?: VendorDefectReturn[];
+  reconciliations?: ReconciliationExport[];
+};
 type FinanceSheetRow = { type: string; dateOrPeriod: string | number; paymentDate?: string; name: string; source: string; amount: number; received: number; outstanding: number; notes: string; recordId: string };
 
 function excelSerial(iso: string | null | undefined) {
@@ -81,13 +95,13 @@ function setCellValue(xml:string,ref:string,value:string|number){
 function refreshChartCaches(xml:string,calcValues:Map<string,string|number>){
   return xml.replace(/<c:(numRef|strRef)>[\s\S]*?<\/c:\1>/g,reference=>{
     const formula=/<c:f>([\s\S]*?)<\/c:f>/.exec(reference)?.[1];
-    const range=formula&&/^Calc!\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)$/.exec(formula);
+    const range=formula&&/^'?([^'!]+)'?!\$?([A-Z]+)\$?(\d+):\$?([A-Z]+)\$?(\d+)$/.exec(formula);
     if(!range) return reference;
-    const [,firstColumn,firstRow,lastColumn,lastRow]=range;
+    const [,sheet,firstColumn,firstRow,lastColumn,lastRow]=range;
     const startRow=Number(firstRow),endRow=Number(lastRow);
     const values:string[]=[];
     for(let row=startRow;row<=endRow;row++){
-      const value=calcValues.get(`${firstColumn}${row}`);
+      const value=calcValues.get(`${sheet}!${firstColumn}${row}`) ?? calcValues.get(`${firstColumn}${row}`);
       if(value===undefined) return reference;
       values.push(String(value));
     }
@@ -173,6 +187,140 @@ async function appendFinanceSheet(zip:JSZip,finance:AdditionalFinanceData){
   const sheet=buildFinanceSheet(finance);
   zip.file(workbookPath,workbook);zip.file(relationshipsPath,relationships);zip.file(contentTypesPath,contentTypes);zip.file(sheetPath,sheet.xml);
   return sheet.lastRow;
+}
+
+type AnalyticsSection = {
+  title: string;
+  headers: string[];
+  rows: Array<Array<string | number>>;
+  startColumn?: number;
+  startRow?: number;
+};
+type AnalyticsSheet = {
+  xml: string;
+  lastRow: number;
+  sectionRows: Record<string, { start: number; end: number; startColumn: number }>;
+  cellValues: Map<string, string | number>;
+};
+type AnalyticsChart = { templateNumber: number; formulas: string[]; title?: string };
+
+function buildAnalyticsSheet(sections: AnalyticsSection[]) {
+  const rows = new Map<number, Map<number, string>>();
+  const sectionRows: AnalyticsSheet['sectionRows'] = {};
+  const cellValues = new Map<string, string | number>();
+  let lastRow = 2;
+  const addCell=(row:number,column:number,markup:string)=>{
+    const cells=rows.get(row)||new Map<number,string>();
+    cells.set(column,markup);
+    rows.set(row,cells);
+  };
+  addCell(1,0,cellText('A1','CONIC — ANALYTICS','5'));
+  addCell(2,0,cellText('A2','Calculated from current MongoDB records at the time of export. Supporting charts are below the analytics tables.','12'));
+  for (const section of sections) {
+    const startColumn=section.startColumn||0;
+    const titleRow=section.startRow||lastRow+2;
+    for(let offset=0;offset<section.headers.length;offset++){
+      const ref=`${excelColumn(startColumn+offset)}${titleRow}`;
+      addCell(titleRow,startColumn+offset,offset===0?cellText(ref,section.title,'1'):`<c r="${ref}" s="1"/>`);
+    }
+    const headerRow=titleRow+1;
+    section.headers.forEach((header,index)=>{
+      const column=startColumn+index,ref=`${excelColumn(column)}${headerRow}`;
+      addCell(headerRow,column,cellText(ref,header,'5'));
+    });
+    const dataStart=headerRow+1;
+    for(const [rowIndex,values] of section.rows.entries()){
+      const rowNumber=dataStart+rowIndex;
+      values.forEach((value,index)=>{
+        const column=startColumn+index,ref=`${excelColumn(column)}${rowNumber}`;
+        cellValues.set(`Analytics!${ref}`,value);
+        addCell(rowNumber,column,typeof value==='number'?cellNum(ref,value,'18'):cellText(ref,value,'12'));
+      });
+    }
+    const dataEnd=dataStart+section.rows.length-1;
+    sectionRows[section.title]={start:dataStart,end:dataEnd,startColumn};
+    lastRow=Math.max(lastRow,dataEnd,titleRow+1);
+  }
+  const serializedRows=[...rows.entries()].sort(([a],[b])=>a-b).map(([rowNumber,cells])=>
+    `<row r="${rowNumber}">${[...cells.entries()].sort(([a],[b])=>a-b).map(([,markup])=>markup).join('')}</row>`
+  ).join('');
+  const lastColumn=excelColumn(Math.max(5,...sections.map(section=>(section.startColumn||0)+section.headers.length-1)));
+  return {
+    xml:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:${lastColumn}${lastRow}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><cols><col min="1" max="1" width="32" customWidth="1"/><col min="2" max="2" width="18" customWidth="1"/><col min="3" max="3" width="16" customWidth="1"/><col min="4" max="4" width="3" customWidth="1"/><col min="5" max="5" width="32" customWidth="1"/><col min="6" max="6" width="18" customWidth="1"/><col min="7" max="7" width="3" customWidth="1"/><col min="8" max="8" width="34" customWidth="1"/><col min="9" max="9" width="18" customWidth="1"/><col min="10" max="10" width="20" customWidth="1"/></cols><sheetData>${serializedRows}</sheetData></worksheet>`,
+    lastRow,
+    sectionRows,
+    cellValues
+  };
+}
+
+function replaceChartFormulas(xml:string,formulas:string[],title?:string){
+  let index=0;
+  const replaced=xml.replace(/<c:f>[\s\S]*?<\/c:f>/g,()=>{
+    const formula=formulas[index++];
+    if(!formula) throw new Error('Analytics chart source ranges do not match the template chart.');
+    return `<c:f>${esc(formula)}</c:f>`;
+  });
+  if(index!==formulas.length) throw new Error('Analytics chart is missing a source range.');
+  return title?replaced.replace(/(<c:title>[\s\S]*?<a:t>)[\s\S]*?(<\/a:t>[\s\S]*?<\/c:title>)/,`$1${esc(title)}$2`):replaced;
+}
+
+function setAnchorCoordinate(anchor:string,point:'from'|'to',coordinate:'col'|'row',value:number){
+  const pattern=new RegExp(`(<xdr:${point}>[\\\\s\\\\S]*?<xdr:${coordinate}>)(\\\\d+)(<\\\\/xdr:${coordinate}>)`);
+  return anchor.replace(pattern,`$1${value}$3`);
+}
+
+async function appendAnalyticsSheet(zip:JSZip,sheet:AnalyticsSheet,charts:AnalyticsChart[]){
+  const workbookPath='xl/workbook.xml',relationshipsPath='xl/_rels/workbook.xml.rels',contentTypesPath='[Content_Types].xml';
+  let workbook=await zip.file(workbookPath)!.async('string');
+  let relationships=await zip.file(relationshipsPath)!.async('string');
+  let contentTypes=await zip.file(contentTypesPath)!.async('string');
+  const maxSheetId=Math.max(0,...[...workbook.matchAll(/<sheet\b[^>]*\bsheetId="(\d+)"/g)].map(match=>Number(match[1])));
+  const maxRelationshipId=Math.max(0,...[...relationships.matchAll(/\bId="rId(\d+)"/g)].map(match=>Number(match[1])));
+  const maxWorksheetNumber=Math.max(0,...Object.keys(zip.files).map(name=>/^xl\/worksheets\/sheet(\d+)\.xml$/.exec(name)).filter(Boolean).map(match=>Number(match![1])));
+  const relationshipId=`rId${maxRelationshipId+1}`,sheetPath=`xl/worksheets/sheet${maxWorksheetNumber+1}.xml`;
+  workbook=workbook.replace('</sheets>',`<sheet name="Analytics" sheetId="${maxSheetId+1}" r:id="${relationshipId}"/></sheets>`);
+  relationships=relationships.replace('</Relationships>',`<Relationship Id="${relationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/${path.basename(sheetPath)}"/></Relationships>`);
+  const maxDrawingNumber=Math.max(0,...Object.keys(zip.files).map(name=>/^xl\/drawings\/drawing(\d+)\.xml$/.exec(name)).filter(Boolean).map(match=>Number(match![1])));
+  const drawingPath=`xl/drawings/drawing${maxDrawingNumber+1}.xml`;
+  const drawingRelationshipId='rId1';
+  let worksheetXml=sheet.xml.replace('</worksheet>',`<drawing r:id="${drawingRelationshipId}"/></worksheet>`);
+  const worksheetRelationships=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="${drawingRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/${path.basename(drawingPath)}"/></Relationships>`;
+  const templateDrawing=await zip.file('xl/drawings/drawing2.xml')!.async('string');
+  const templateAnchors=[...templateDrawing.matchAll(/<xdr:twoCellAnchor[\s\S]*?<\/xdr:twoCellAnchor>/g)].map(match=>match[0]);
+  if(templateAnchors.length<2) throw new Error('Template dashboard chart anchors are missing.');
+  const drawingAnchors:string[]=[];
+  const drawingRelationships:string[]=[];
+  const maxChartNumber=Math.max(0,...Object.keys(zip.files).map(name=>/^xl\/charts\/chart(\d+)\.xml$/.exec(name)).filter(Boolean).map(match=>Number(match![1])));
+  for(const [index,chart] of charts.entries()){
+    const chartNumber=maxChartNumber+index+1;
+    const chartPath=`xl/charts/chart${chartNumber}.xml`;
+    const original=await zip.file(`xl/charts/chart${chart.templateNumber}.xml`)!.async('string');
+    const chartXml=replaceChartFormulas(original,chart.formulas,chart.title);
+    zip.file(chartPath,chartXml);
+    const columns=index%2===0?{from:0,to:7}:{from:7,to:14};
+    const firstRow=sheet.lastRow+2+Math.floor(index/2)*17;
+    const lastRow=firstRow+15;
+    let anchor=setAnchorCoordinate(templateAnchors[index%2],'from','col',columns.from);
+    anchor=setAnchorCoordinate(anchor,'to','col',columns.to);
+    anchor=setAnchorCoordinate(anchor,'from','row',firstRow);
+    anchor=setAnchorCoordinate(anchor,'to','row',lastRow);
+    anchor=anchor.replace(/<xdr:cNvPr id="\d+"/,`<xdr:cNvPr id="${index+1}"`);
+    anchor=anchor.replace(/r:id="rId\d+"/,`r:id="rId${index+1}"`);
+    drawingAnchors.push(anchor);
+    drawingRelationships.push(`<Relationship Id="rId${index+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${chartNumber}.xml"/>`);
+    contentTypes=contentTypes.replace('</Types>',`<Override PartName="/${chartPath}" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/></Types>`);
+  }
+  const drawingXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${drawingAnchors.join('')}</xdr:wsDr>`;
+  const drawingRels=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${drawingRelationships.join('')}</Relationships>`;
+  contentTypes=contentTypes.replace('</Types>',`<Override PartName="/${sheetPath}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`);
+  contentTypes=contentTypes.replace('</Types>',`<Override PartName="/${drawingPath}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+  zip.file(workbookPath,workbook);
+  zip.file(relationshipsPath,relationships);
+  zip.file(contentTypesPath,contentTypes);
+  zip.file(sheetPath,worksheetXml);
+  zip.file(`xl/worksheets/_rels/${path.basename(sheetPath)}.rels`,worksheetRelationships);
+  zip.file(drawingPath,drawingXml);
+  zip.file(`xl/drawings/_rels/${path.basename(drawingPath)}.rels`,drawingRels);
 }
 
 function buildDailyXml(entries: DailyEntry[], expenseCategories: string[], purchases: PurchaseEntry[], opening: { online: number; cash: number }, finance:AdditionalFinanceData, dailyLimit:number, purchaseLimit:number, financeSheetLastRow:number) {
@@ -361,7 +509,7 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     }
   }
   if(monthFinance){
-    const financeRows=[['Monthly salary',monthlySalary],['Truck EMI',Number(monthFinance.truckEmi||0)],['Auto EMI',Number(monthFinance.autoEmi||0)],['Room rent',Number(monthFinance.roomRent||0)],['Loan repayments',monthlyLoanRepayments],['Savings deposited',Number(monthFinance.savingsDeposit||0)],['Partner payouts from savings',(monthFinance.partnerPayments||[]).reduce((total,payment)=>total+Number(payment.amount||0),0)]] as const;
+    const financeRows=[['Monthly salary',monthlySalary],['Truck EMI',Number(monthFinance.truckEmi||0)],['Auto EMI',Number(monthFinance.autoEmi||0)],['Room rent',Number(monthFinance.roomRent||0)],['Loan repayments',monthlyLoanRepayments]] as const;
     summaryXml=setWorksheetCell(summaryXml,`A${additionalRow}`,cellText(`A${additionalRow}`,'Monthly Finance','5'));
     additionalRow++;
     for(const [label,value] of financeRows){summaryXml=setWorksheetCell(summaryXml,`A${additionalRow}`,cellText(`A${additionalRow}`,label,'12'));summaryXml=setWorksheetCell(summaryXml,`B${additionalRow}`,cellNum(`B${additionalRow}`,value,'12'));additionalRow++;}
@@ -409,6 +557,7 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     setCalcValue(amountRef,amount);
   }
   let annualSales=0,annualPurchases=0,annualExpenses=0,annualNet=0;
+  const yearlyAnalyticsRows:Array<Array<string|number>>=[];
   for(let month=1;month<=12;month++){
     const start=`${selectedYearlyYear}-${String(month).padStart(2,'0')}-01`;
     const end=new Date(Date.UTC(selectedYearlyYear,month,1)).toISOString().slice(0,10);
@@ -421,6 +570,7 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     const purchasesTotal=monthPurchases.reduce((total,entry)=>total+Object.values(entry.vendorAmounts||{}).reduce((amount,value)=>amount+Number(value||0),0),0);
     annualSales+=sales;annualPurchases+=purchasesTotal;annualExpenses+=expenses;annualNet+=sales-purchasesTotal-expenses;
     const balances=balanceThrough(new Date(Date.UTC(selectedYearlyYear,month,0)).toISOString().slice(0,10),daily,purchases,{online:settings.openingOnlineBalance,cash:settings.openingCashBalance},finance.months,finance.vendorReturns,finance.loans);
+    yearlyAnalyticsRows.push([MONTHS[month-1],sales,purchasesTotal,expenses,sales-purchasesTotal-expenses,balances.total]);
     const row=5+month;
     for(const [column,value] of [['B',sales],['C',purchasesTotal],['D',expenses],['E',sales-purchasesTotal-expenses],['F',balances.total]] as const) yearlyXml=setFormulaCache(yearlyXml,`${column}${row}`,value);
     for(const [column,value] of [['N',sales],['O',purchasesTotal],['P',expenses],['Q',sales-purchasesTotal-expenses],['R',balances.total]] as const) setCalcValue(`${column}${month+1}`,value);
@@ -436,6 +586,305 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
   const annualClosing=balanceThrough(`${selectedYearlyYear}-12-31`,daily,purchases,{online:settings.openingOnlineBalance,cash:settings.openingCashBalance},finance.months,finance.vendorReturns,finance.loans);
   for(const [ref,value] of Object.entries({B18:annualSales,C18:annualPurchases,D18:annualExpenses,E18:annualNet,F18:annualClosing.total})) yearlyXml=setFormulaCache(yearlyXml,ref,value);
   zip.file('xl/worksheets/sheet2.xml',yearlyXml);
+  const savingsBalance=(finance.months||[]).reduce((balance,entry)=>balance+Number(entry.savingsDeposit||0)+(entry.savingsEntries||[]).reduce((total,item)=>total+Number(item.amount||0),0)-(entry.partnerPayments||[]).reduce((total,item)=>total+Number(item.amount||0),0),0);
+  const loanOutstanding=(finance.loans||[]).reduce((total,loan)=>total+Math.max(0,Number(loan.amountTaken||0)-(loan.repayments||[]).reduce((repaid,item)=>repaid+Number(item.amount||0),0)),0);
+  const vendorCreditsPending=Math.max(0,(finance.vendorReturns||[]).reduce((total,item)=>total+Number(item.amount||0)-(item.receipts||[]).reduce((received,receipt)=>received+Number(receipt.amount||0),0),0));
+  const vendorCreditsReceived= (finance.vendorReturns||[]).flatMap(item=>item.receipts||[]).filter(receipt=>receipt.date>=periodStart&&receipt.date<periodEnd).reduce((total,receipt)=>total+Number(receipt.amount||0),0);
+  const monthlyAnalyticsRows:Array<Array<string|number>>=[
+    ['Selected period',`${MONTHS[selectedMonth-1]} ${monthlySelectedYear}`],
+    ['Online sales',monthlySummaryValues.B5],
+    ['Cash sales',monthlySummaryValues.B6],
+    ['Total sales',monthlySummaryValues.B7],
+    ['Total purchases',totalPurchases],
+    ['Purchases paid online',monthPurchases.reduce((total,item)=>total+Number(item.onlinePurchasePaid||0),0)],
+    ['Purchases paid cash',monthPurchases.reduce((total,item)=>total+Number(item.cashPurchasePaid||0),0)],
+    ['Pending purchases',monthPurchases.reduce((total,item)=>total+Object.values(item.vendorAmounts||{}).reduce((sum,value)=>sum+Number(value||0),0)-Number(item.onlinePurchasePaid||0)-Number(item.cashPurchasePaid||0),0)],
+    ['Daily expenses',dailyExpenses],
+    ['Salaries',monthlySalary],
+    ['Truck EMI',Number(monthFinance?.truckEmi||0)],
+    ['Auto EMI',Number(monthFinance?.autoEmi||0)],
+    ['Room rent',Number(monthFinance?.roomRent||0)],
+    ['Loan repayments',monthlyLoanRepayments],
+    ['Total expenses',totalExpenses],
+    ['Net amount',totalSales-totalPurchases-totalExpenses],
+    ['Opening online balance',openingBalances.online],
+    ['Closing online balance',closingBalances.online],
+    ['Opening cash balance',openingBalances.cash],
+    ['Closing cash balance',closingBalances.cash],
+    ['Closing total balance',closingBalances.total],
+    ['Current loan outstanding',loanOutstanding],
+    ['Vendor credits pending',vendorCreditsPending],
+    ['Vendor credits received this month',vendorCreditsReceived]
+  ];
+  const expenseAnalyticsRows:Array<Array<string|number>>=[
+    ...expenseCategories.map(category=>[category,monthDaily.reduce((total,entry)=>total+Number(entry.expenses?.[category]||0),0)]),
+    ['Salary',monthlySalary],
+    ['Truck EMI',Number(monthFinance?.truckEmi||0)],
+    ['Auto EMI',Number(monthFinance?.autoEmi||0)],
+    ['Room rent',Number(monthFinance?.roomRent||0)],
+    ['Loan repayment',monthlyLoanRepayments]
+  ];
+  const vendorAnalyticsRows=allPurchaseCategories.map(vendor=>[
+    vendor,
+    monthPurchases.reduce((total,entry)=>total+Number(entry.vendorAmounts?.[vendor]||0),0)
+  ]);
+  const expenseAnalysisRows=expenseCategories.map(category=>({
+    category,
+    amount:monthDaily.reduce((total,entry)=>total+Number(entry.expenses?.[category]||0),0)
+  })).filter(item=>item.amount>0).sort((a,b)=>b.amount-a.amount);
+  if(!expenseAnalysisRows.length) expenseAnalysisRows.push({category:'No expenses',amount:0});
+  const expenseAnalysisTableRows=expenseAnalysisRows.map(item=>[
+    item.category,
+    item.amount,
+    `${dailyExpenses>0?(item.amount/dailyExpenses*100).toFixed(1):'0.0'}%`
+  ]);
+  const formatRatio=(part:number,total:number)=>`${total>0?(part/total*100).toFixed(1):'0.0'}%`;
+  const pendingPurchases=monthPurchases.reduce((total,item)=>
+    total+Math.max(0,Object.values(item.vendorAmounts||{}).reduce((sum,value)=>sum+Number(value||0),0)-Number(item.onlinePurchasePaid||0)-Number(item.cashPurchasePaid||0)),0);
+  const selectedMonthEnd=new Date(Date.UTC(monthlySelectedYear,selectedMonth,0)).toISOString().slice(0,10);
+  const previousMonthDate=new Date(Date.UTC(monthlySelectedYear,selectedMonth-2,1));
+  const previousMonthStart=previousMonthDate.toISOString().slice(0,10);
+  const previousMonthEnd=new Date(Date.UTC(previousMonthDate.getUTCFullYear(),previousMonthDate.getUTCMonth()+1,1)).toISOString().slice(0,10);
+  const previousMonthPeriod=previousMonthStart.slice(0,7);
+  const summarizePeriod=(start:string,end:string,period:string)=>{
+    const periodDaily=daily.filter(entry=>entry.date>=start&&entry.date<end);
+    const periodPurchases=purchases.filter(entry=>entry.purchaseDate>=start&&entry.purchaseDate<end);
+    const periodFinance=(finance.months||[]).find(entry=>entry.period===period);
+    const sales=periodDaily.reduce((sum,entry)=>sum+Number(entry.onlineSales||0)+Number(entry.cashSales||0),0);
+    const purchaseTotal=periodPurchases.reduce((sum,entry)=>sum+Object.values(entry.vendorAmounts||{}).reduce((amount,value)=>amount+Number(value||0),0),0);
+    const operations=(periodFinance?.salaries||[]).reduce((sum,item)=>sum+Number(item.amount||0),0)
+      +Number(periodFinance?.truckEmi||0)+Number(periodFinance?.autoEmi||0)+Number(periodFinance?.roomRent||0);
+    const loanPayments=(finance.loans||[]).flatMap(loan=>loan.repayments||[])
+      .filter(item=>item.date>=start&&item.date<end).reduce((sum,item)=>sum+Number(item.amount||0),0);
+    const expenses=periodDaily.reduce((sum,entry)=>sum+Object.values(entry.expenses||{}).reduce((amount,value)=>amount+Number(value||0),0),0)+operations+loanPayments;
+    return {sales,purchases:purchaseTotal,expenses,net:sales-purchaseTotal-expenses};
+  };
+  const currentMonthSummary={sales:totalSales,purchases:totalPurchases,expenses:totalExpenses,net:totalSales-totalPurchases-totalExpenses};
+  const previousMonthSummary=summarizePeriod(previousMonthStart,previousMonthEnd,previousMonthPeriod);
+  const comparisonRows=(Object.keys(currentMonthSummary) as Array<keyof typeof currentMonthSummary>).map(metric=>{
+    const current=currentMonthSummary[metric],previous=previousMonthSummary[metric],difference=current-previous;
+    return [metric==='sales'?'Sales':metric==='purchases'?'Purchases':metric==='expenses'?'Expenses':'Net Amount',current,previous,difference,previous===0?'N/A':`${(difference/Math.abs(previous)*100).toFixed(1)}%`];
+  });
+  const yearToDate=currentMonthSummary;
+  for(let month=1;month<selectedMonth;month++){
+    const start=`${monthlySelectedYear}-${String(month).padStart(2,'0')}-01`;
+    const end=new Date(Date.UTC(monthlySelectedYear,month,1)).toISOString().slice(0,10);
+    const period=summarizePeriod(start,end,start.slice(0,7));
+    yearToDate.sales+=period.sales;
+    yearToDate.purchases+=period.purchases;
+    yearToDate.expenses+=period.expenses;
+    yearToDate.net+=period.net;
+  }
+  const ytdRows:Array<Array<string|number>>=[
+    ['Year-to-date sales',yearToDate.sales],
+    ['Year-to-date purchases',yearToDate.purchases],
+    ['Year-to-date expenses',yearToDate.expenses],
+    ['Year-to-date net amount',yearToDate.net],
+    ['Closing total balance',closingBalances.total]
+  ];
+  const dailyOnlineExpensePayments=monthDaily.reduce((sum,entry)=>sum+Number(entry.expensePaidOnline||0),0);
+  const dailyCashExpensePayments=monthDaily.reduce((sum,entry)=>sum+Number(entry.expensePaidCash||0),0);
+  const periodFinanceRecords=(finance.months||[]).filter(item=>item.period===`${monthlySelectedYear}-${String(selectedMonth).padStart(2,'0')}`);
+  const financeOnlinePayments=periodFinanceRecords.reduce((sum,item)=>{
+    const [year,month]=item.period.split('-').map(Number);
+    const financeMonthEnd=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);
+    return sum
+      +(item.salaries||[]).filter(salary=>(salary.paymentDate||financeMonthEnd)>=periodStart&&(salary.paymentDate||financeMonthEnd)<periodEnd).reduce((amount,salary)=>amount+Number(salary.amount||0),0)
+      +((item.truckEmiPaymentDate||financeMonthEnd)>=periodStart&&(item.truckEmiPaymentDate||financeMonthEnd)<periodEnd?Number(item.truckEmi||0):0)
+      +((item.autoEmiPaymentDate||financeMonthEnd)>=periodStart&&(item.autoEmiPaymentDate||financeMonthEnd)<periodEnd?Number(item.autoEmi||0):0)
+      +(financeMonthEnd>=periodStart&&financeMonthEnd<periodEnd?Number(item.roomRent||0):0);
+  },0);
+  const financeRepaymentPayments=(finance.loans||[]).flatMap(loan=>loan.repayments||[])
+    .filter(item=>item.date>=periodStart&&item.date<periodEnd).reduce((sum,item)=>sum+Number(item.amount||0),0);
+  const onlineExpensePayments=dailyOnlineExpensePayments+financeOnlinePayments+financeRepaymentPayments;
+  const cashExpensePayments=dailyCashExpensePayments;
+  const allExpensePayments=onlineExpensePayments+cashExpensePayments;
+  const percentOfPaidExpenses=(amount:number)=>allExpensePayments>0?`${(amount/allExpensePayments*100).toFixed(1)}%`:'0.0%';
+  const expensePaymentRows:Array<Array<string|number>>=[
+    ['Daily expenses - online',dailyOnlineExpensePayments,percentOfPaidExpenses(dailyOnlineExpensePayments)],
+    ['Daily expenses - cash',dailyCashExpensePayments,percentOfPaidExpenses(dailyCashExpensePayments)],
+    ['Salary, EMI, rent & loan repayment - online',financeOnlinePayments+financeRepaymentPayments,percentOfPaidExpenses(financeOnlinePayments+financeRepaymentPayments)],
+    ['Total online / bank',onlineExpensePayments,percentOfPaidExpenses(onlineExpensePayments)],
+    ['Total cash',cashExpensePayments,percentOfPaidExpenses(cashExpensePayments)],
+    ['Total expenses paid',allExpensePayments,'100.0%']
+  ];
+  const topVendorRows=allPurchaseCategories.map(vendor=>({
+    vendor,
+    amount:monthPurchases.reduce((sum,entry)=>sum+Number(entry.vendorAmounts?.[vendor]||0),0)
+  })).filter(item=>item.amount>0).sort((a,b)=>b.amount-a.amount).slice(0,10)
+    .map(item=>[item.vendor,item.amount,totalPurchases>0?`${(item.amount/totalPurchases*100).toFixed(1)}%`:'0.0%']);
+  if(!topVendorRows.length) topVendorRows.push(['No vendor purchases',0,'0.0%']);
+  const reconciliation=(finance.reconciliations||[]).filter(item=>item.date<=selectedMonthEnd).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  const reconciliationRows:Array<Array<string|number>>=reconciliation?[
+    ['Online',reconciliation.actualOnline,reconciliation.bookOnline,reconciliation.varianceOnline,reconciliation.varianceOnline===0?'MATCH':'CHECK'],
+    ['Cash',reconciliation.actualCash,reconciliation.bookCash,reconciliation.varianceCash,reconciliation.varianceCash===0?'MATCH':'CHECK'],
+    ['As of date',reconciliation.date,'','','']
+  ]:[
+    ['Status','No saved reconciliation through selected month-end','','',''],
+    ['As of date',selectedMonthEnd,'','','']
+  ];
+  const monthlySavingsDeposit=Number(monthFinance?.savingsDeposit||0);
+  const datedSavingsDeposits=monthFinance?.savingsEntries||[];
+  const monthlyPartnerPayouts=(monthFinance?.partnerPayments||[]).reduce((total,payment)=>total+Number(payment.amount||0),0);
+  const savingsRows:Array<Array<string|number>>=[
+    ['Deposited this month','','',monthlySavingsDeposit+datedSavingsDeposits.reduce((total,item)=>total+Number(item.amount||0),0)],
+    ['Current savings balance','','',savingsBalance],
+    ...(
+      monthlySavingsDeposit>0
+        ?[['Monthly deposit',selectedMonthEnd,'Monthly savings deposit',monthlySavingsDeposit] as Array<string|number>]
+        :[]
+    ),
+    ...datedSavingsDeposits.map(item=>['Dated deposit',item.date,item.note||'Savings deposit',Number(item.amount||0)]),
+    ...(
+      monthlyPartnerPayouts>0
+        ?[['Partner payouts',selectedMonthEnd,'Paid from savings',-monthlyPartnerPayouts] as Array<string|number>]
+        :[]
+    )
+  ];
+  const includeReconciliation=finance.reconciliations!==undefined;
+  const reconciliationStartRow=Math.max(
+    55,
+    42+expenseAnalyticsRows.length,
+    42+vendorAnalyticsRows.length,
+    12+monthlyAnalyticsRows.length
+  );
+  const topVendorsStartRow=reconciliationStartRow+Math.max(reconciliationRows.length,expensePaymentRows.length)+4;
+  const monthComparisonStartRow=topVendorsStartRow+Math.max(topVendorRows.length,ytdRows.length)+4;
+  const analyticsSections:AnalyticsSection[]=[
+    {
+      title:'KEY PERFORMANCE RATIOS',
+      headers:['Metric','Value'],
+      rows:[
+        ['Sales vs Purchases',formatRatio(totalPurchases,totalSales)],
+        ['Sales vs Expenses',formatRatio(totalExpenses,totalSales)],
+        ['Net Margin',formatRatio(totalSales-totalPurchases-totalExpenses,totalSales)]
+      ],
+      startColumn:0,
+      startRow:3
+    },
+    {
+      title:'CURRENT BALANCES & PAYMENTS',
+      headers:['Metric','Amount'],
+      rows:[
+        ['Online Balance',closingBalances.online],
+        ['Cash Balance',closingBalances.cash],
+        ['Total Balance',closingBalances.total],
+        ['Pending Purchases',pendingPurchases]
+      ],
+      startColumn:4,
+      startRow:3
+    },
+    {
+      title:'EXPENSE ANALYSIS',
+      headers:['Category','Amount','% of Expenses'],
+      rows:expenseAnalysisTableRows,
+      startColumn:0,
+      startRow:10
+    },
+    {
+      title:'Selected Month Summary',
+      headers:['Metric','Value'],
+      rows:monthlyAnalyticsRows,
+      startColumn:4,
+      startRow:10
+    },
+    {
+      title:'MONTH-OVER-MONTH COMPARISON',
+      headers:['Metric',`${MONTHS[selectedMonth-1]} ${monthlySelectedYear}`,`${MONTHS[previousMonthDate.getUTCMonth()]} ${previousMonthDate.getUTCFullYear()}`,'Change','Change %'],
+      rows:comparisonRows,
+      startColumn:0,
+      startRow:monthComparisonStartRow
+    },
+    ...(includeReconciliation?[{
+      title:'RECONCILIATION CHECK',
+      headers:['Account','Verified Balance','Book Balance','Difference','Status'],
+      rows:reconciliationRows,
+      startColumn:0,
+      startRow:reconciliationStartRow
+    }]:[]),
+    {
+      title:'EXPENSES BY PAYMENT SOURCE',
+      headers:['Payment Source','Amount','% of Paid Expenses'],
+      rows:expensePaymentRows,
+      startColumn:6,
+      startRow:reconciliationStartRow
+    },
+    {
+      title:'TOP VENDORS',
+      headers:['Vendor','Purchase Amount','% of Purchases'],
+      rows:topVendorRows,
+      startColumn:0,
+      startRow:topVendorsStartRow
+    },
+    {
+      title:'YEAR-TO-DATE TOTALS',
+      headers:['Metric','Amount'],
+      rows:ytdRows,
+      startColumn:6,
+      startRow:topVendorsStartRow
+    },
+    {
+      title:'SAVINGS DEPOSITS & BALANCE',
+      headers:['Type','Date','Note','Amount'],
+      rows:savingsRows,
+      startColumn:7,
+      startRow:monthComparisonStartRow+comparisonRows.length+4
+    },
+    {
+      title:'Selected Month Expense Breakdown',
+      headers:['Expense Category','Amount'],
+      rows:expenseAnalyticsRows,
+      startColumn:0,
+      startRow:monthComparisonStartRow+comparisonRows.length+4
+    },
+    {
+      title:'Selected Month Vendor Purchases',
+      headers:['Vendor','Purchase Amount'],
+      rows:vendorAnalyticsRows,
+      startColumn:4,
+      startRow:monthComparisonStartRow+comparisonRows.length+4
+    },
+    {title:`${selectedYearlyYear} Monthly Analytics`,headers:['Month','Sales','Purchases','Expenses','Net Amount','Closing Balance'],rows:yearlyAnalyticsRows},
+    {title:`${selectedYearlyYear} Annual Totals`,headers:['Metric','Value'],rows:[['Annual sales',annualSales],['Annual purchases',annualPurchases],['Annual expenses',annualExpenses],['Annual net amount',annualNet],['Year-end closing balance',annualClosing.total]]}
+  ];
+  const analyticsSheet=buildAnalyticsSheet(analyticsSections);
+  const analyticsRange=(section:string,column:string,firstOffset=0,lastOffset?:number)=>{
+    const rows=analyticsSheet.sectionRows[section];
+    if(!rows||rows.end<rows.start) return null;
+    const first=rows.start+firstOffset,last=lastOffset===undefined?rows.end:Math.min(rows.end,rows.start+lastOffset);
+    return first<=last?`Analytics!$${column}$${first}:$${column}$${last}`:null;
+  };
+  const analyticsCharts:AnalyticsChart[]=[];
+  const monthSummaryTitle='Selected Month Summary';
+  const monthExpenseTitle='Selected Month Expense Breakdown';
+  const vendorTitle='Selected Month Vendor Purchases';
+  const monthSummaryCategories=analyticsRange(monthSummaryTitle,'E',1,2);
+  const monthSummaryValues=analyticsRange(monthSummaryTitle,'F',1,2);
+  const annualTotalsTitle=`${selectedYearlyYear} Annual Totals`;
+  const annualCategories=analyticsRange(annualTotalsTitle,'A',0,2);
+  const annualValues=analyticsRange(annualTotalsTitle,'B',0,2);
+  const expenseCategoriesRange=analyticsRange(monthExpenseTitle,'A');
+  const expenseValuesRange=analyticsRange(monthExpenseTitle,'B');
+  const vendorCategoriesRange=analyticsRange(vendorTitle,'E');
+  const vendorValuesRange=analyticsRange(vendorTitle,'F');
+  const monthlyTrendsTitle=`${selectedYearlyYear} Monthly Analytics`;
+  const monthLabels=analyticsRange(monthlyTrendsTitle,'A');
+  const monthColumns=['B','C','D','E','F'];
+  if(monthSummaryCategories&&monthSummaryValues) analyticsCharts.push({templateNumber:1,formulas:[monthSummaryCategories,monthSummaryValues]});
+  if(annualCategories&&annualValues) analyticsCharts.push({templateNumber:2,formulas:[annualCategories,annualValues]});
+  if(expenseCategoriesRange&&expenseValuesRange) analyticsCharts.push({templateNumber:2,formulas:[expenseCategoriesRange,expenseValuesRange],title:'Selected Month Expense Breakdown'});
+  if(vendorCategoriesRange&&vendorValuesRange) analyticsCharts.push({templateNumber:3,formulas:[vendorCategoriesRange,vendorValuesRange]});
+  if(monthLabels){
+    monthColumns.forEach((column,index)=>{
+      const values=analyticsRange(monthlyTrendsTitle,column);
+      if(!values) return;
+      const formulas:string[]=[];
+      for(let series=0;series<=index;series++) formulas.push(monthLabels,analyticsRange(monthlyTrendsTitle,monthColumns[series])!);
+      analyticsCharts.push({templateNumber:index+4,formulas});
+    });
+  }
+  for(const [ref,value] of analyticsSheet.cellValues) calcValues.set(ref,value);
+  await appendAnalyticsSheet(zip,analyticsSheet,analyticsCharts);
   for(let month=1;month<=12;month++) setCalcValue(`M${month+1}`,MONTHS[month-1]);
   for(const [ref,value] of calcValues) calcXml=typeof value==='number'?setFormulaCache(calcXml,ref,value):setCalcCachedText(calcXml,ref,value);
   zip.file('xl/worksheets/sheet7.xml',calcXml);
@@ -462,17 +911,21 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
   return zip.generateAsync({type:'nodebuffer'});
 }
 
-export async function exportWorkbook(): Promise<Buffer> {
+export async function exportWorkbook(options:{includeReconciliation?:boolean}={}): Promise<Buffer> {
   const db=await getDb();
   const business = await db.collection<{_id:string;name?:string;openingOnlineBalance?:number;openingCashBalance?:number;vendors?:string[];expenseCategories?:string[]}>('businesses').findOne({_id:BUSINESS_ID});
   const daily=await db.collection<DailyEntry>('dailyEntries').find({businessId:BUSINESS_ID}).sort({date:1}).toArray();
   const purchases=await db.collection<PurchaseEntry>('purchaseEntries').find({businessId:BUSINESS_ID}).sort({purchaseDate:1}).toArray();
-  const [financeMonths,loans,vendorReturns]=await Promise.all([
+  const reconciliationQuery=options.includeReconciliation
+    ?db.collection<ReconciliationExport & {businessId:string}>('accountReconciliations').find({businessId:BUSINESS_ID}).sort({date:-1}).toArray()
+    :Promise.resolve(undefined);
+  const [financeMonths,loans,vendorReturns,reconciliations]=await Promise.all([
     db.collection<FinanceMonth>('monthlyFinance').find({businessId:BUSINESS_ID}).sort({period:1}).toArray(),
     db.collection<FinanceLoan>('financeLoans').find({businessId:BUSINESS_ID}).sort({takenDate:1}).toArray(),
-    db.collection<VendorDefectReturn>('vendorDefectReturns').find({businessId:BUSINESS_ID}).sort({returnDate:1}).toArray()
+    db.collection<VendorDefectReturn>('vendorDefectReturns').find({businessId:BUSINESS_ID}).sort({returnDate:1}).toArray(),
+    reconciliationQuery
   ]);
-    const settings: BusinessSettings={name:business?.name||'CONIC',currency:'INR',dateFormat:'DD-MMM-YYYY',openingOnlineBalance:Number(business?.openingOnlineBalance||0),openingCashBalance:Number(business?.openingCashBalance||0),vendors:Array.isArray(business?.vendors)&&business.vendors.length?business.vendors:DEFAULT_VENDORS,expenseCategories:Array.isArray(business?.expenseCategories)&&business.expenseCategories.length?business.expenseCategories:DEFAULT_EXPENSE_CATEGORIES};
+  const settings: BusinessSettings={name:business?.name||'CONIC',currency:'INR',dateFormat:'DD-MMM-YYYY',openingOnlineBalance:Number(business?.openingOnlineBalance||0),openingCashBalance:Number(business?.openingCashBalance||0),vendors:Array.isArray(business?.vendors)&&business.vendors.length?business.vendors:DEFAULT_VENDORS,expenseCategories:Array.isArray(business?.expenseCategories)&&business.expenseCategories.length?business.expenseCategories:DEFAULT_EXPENSE_CATEGORIES};
   const template=fs.readFileSync(path.join(process.cwd(),'data/templates/CONIC_Business_Tracker.xlsx'));
-  return buildWorkbookFromData(template,daily,purchases,settings,{months:financeMonths,loans,vendorReturns});
+  return buildWorkbookFromData(template,daily,purchases,settings,{months:financeMonths,loans,vendorReturns,reconciliations});
 }

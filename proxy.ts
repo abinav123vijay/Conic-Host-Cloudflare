@@ -25,10 +25,10 @@ export function proxy(request: NextRequest) {
   const isEntryPage = pathname.startsWith('/entries/daily') || pathname.startsWith('/entries/purchases');
   const isEntryApi = pathname.startsWith('/api/daily') || pathname.startsWith('/api/purchases');
   const isSettingsRead = pathname === '/api/settings' && request.method === 'GET';
-  const isFinanceOrSettingsPage = pathname.startsWith('/finance') || pathname.startsWith('/settings');
-  const isFinanceOrSettingsApi = pathname.startsWith('/api/finance') || pathname.startsWith('/api/settings');
+  const isOwnerOnlyPage = pathname.startsWith('/finance') || pathname.startsWith('/settings') || pathname.startsWith('/dashboard/reconciliation');
+  const isOwnerOnlyApi = pathname.startsWith('/api/finance') || pathname.startsWith('/api/settings') || pathname.startsWith('/api/reconciliation');
   const isAdminPage = pathname === '/' || pathname.startsWith('/overview') || pathname.startsWith('/dashboard') || pathname.startsWith('/import-export');
-  const isAdminApi = isApi && !isEntryApi && !isSettingsRead && !isFinanceOrSettingsApi;
+  const isAdminApi = isApi && !isEntryApi && !isSettingsRead && !isOwnerOnlyApi;
 
   if (session.role === 'owner') {
     if (pathname === '/') return NextResponse.redirect(new URL('/dashboard/monthly', request.url));
@@ -36,7 +36,7 @@ export function proxy(request: NextRequest) {
   }
 
   if (session.role === 'admin') {
-    if (isFinanceOrSettingsPage || isFinanceOrSettingsApi) {
+    if (isOwnerOnlyPage || isOwnerOnlyApi) {
       if (isApi) return NextResponse.json({ error: 'This section is available to owners only.' }, { status: 403 });
       return NextResponse.redirect(new URL('/overview?access=restricted', request.url));
     }

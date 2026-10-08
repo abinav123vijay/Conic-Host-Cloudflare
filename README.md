@@ -72,7 +72,7 @@ The imported data replaces the current business dataset for the configured `CONI
 
 ### MongoDB → Excel
 
-`Export Excel Workbook` starts from `data/templates/CONIC_Business_Tracker.xlsx` and writes all current database data into it. The dashboards open on the latest month and year containing records, with refreshed formula and chart caches so totals and analytics are visible immediately. The export includes formulas in the daily and purchase entry tables (including their blank input rows). Finance payment dates and dated savings entries are retained for import/export round trips.
+`Export Excel Workbook` starts from `data/templates/CONIC_Business_Tracker.xlsx` and writes all current database data into it. In addition to the Monthly Dashboard and Yearly Dashboard (with their embedded charts), each export includes a separate Analytics worksheet with sales-to-purchases, sales-to-expenses, and net-margin ratios beside current online/cash/total balances and pending purchases. It also compares the selected month with the previous month, splits paid expense outflows (daily expenses, finance payments, and loan repayments) by online/cash source, ranks the top ten vendors by purchase amount and share, and shows year-to-date totals. Savings deposits, dated deposits, current savings, and partner payouts are grouped in their own savings section, not repeated in the monthly finance summary. Purchase payments are shown separately from expenses. Owners also see the latest saved reconciliation at or before the selected month-end, including verified/book balances and variances. The expense analysis lists each used daily-expense category with its amount and share of daily expenses. Detailed monthly finance, vendor breakdowns, January–December results, annual totals, and charts for sales mix, expense/vendor breakdowns, annual totals, and yearly trends remain available below. The dashboards open on the latest month and year containing records, with refreshed formula and chart caches so totals and analytics are visible immediately. The export includes formulas in the daily and purchase entry tables (including their blank input rows). Finance payment dates and dated savings entries are retained for import/export round trips.
 
 ## Setup
 
@@ -117,7 +117,7 @@ npm run dev
 
 ## Production next step
 
-Authentication now uses the `users` collection and signed sessions. The app remains configured for one business. Invite codes assign one of three roles: Admin can use dashboards, daily sales, purchases and Excel tools but not Finance or Settings; Owner has full access; Staff can use daily sales and purchases only.
+Authentication now uses the `users` collection and signed sessions. The app remains configured for one business. Invite codes assign one of three roles: Admin can use dashboards, daily sales, purchases and Excel tools but not Finance, Settings, or Account Reconciliation; Owner has full access; Staff can use daily sales and purchases only. Finance and loan summaries, reconciliation pages, alerts, and APIs are Owner-only.
 
 ## Sign-in
 

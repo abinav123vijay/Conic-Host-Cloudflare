@@ -34,6 +34,7 @@ export default function OverviewPage() {
   const [error, setError] = useState('');
   const [reconciliationWarnings, setReconciliationWarnings] = useState<ReconciliationWarningData | null>(null);
   const [reconciliationError, setReconciliationError] = useState('');
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -54,20 +55,50 @@ export default function OverviewPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const today = localISODate(new Date());
-    setReconciliationError('');
-    fetch(`/api/reconciliation/summary?date=${today}`, { signal: controller.signal })
+    fetch('/api/auth/me', { signal: controller.signal })
       .then(async response => {
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Unable to load reconciliation warnings.');
-        return result as ReconciliationWarningData;
+        if (!response.ok) throw new Error('Unable to determine account permissions.');
+        return response.json();
       })
-      .then(setReconciliationWarnings)
+      .then(user => setIsOwner(user.role === 'owner'))
       .catch(loadError => {
-        if (loadError.name !== 'AbortError') setReconciliationError(loadError.message || 'Unable to load reconciliation warnings.');
+        if (loadError.name !== 'AbortError') setIsOwner(false);
       });
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    const today = localISODate(new Date());
+    let activeRequest: AbortController | null = null;
+    const loadWarnings = () => {
+      activeRequest?.abort();
+      const controller = new AbortController();
+      activeRequest = controller;
+      setReconciliationError('');
+      fetch(`/api/reconciliation/summary?date=${today}`, { signal: controller.signal, cache: 'no-store' })
+        .then(async response => {
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Unable to load reconciliation warnings.');
+          return result as ReconciliationWarningData;
+        })
+        .then(setReconciliationWarnings)
+        .catch(loadError => {
+          if (loadError.name !== 'AbortError') setReconciliationError(loadError.message || 'Unable to load reconciliation warnings.');
+        });
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') loadWarnings();
+    };
+    loadWarnings();
+    window.addEventListener('focus', loadWarnings);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    return () => {
+      activeRequest?.abort();
+      window.removeEventListener('focus', loadWarnings);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [isOwner]);
 
   if (error) return <section className="content"><div className="page-head"><div><h1>Overview</h1><p>Business performance at a glance.</p></div></div><div className="card table-card" role="alert">{error}</div></section>;
   if (!monthly || !yearly) return <div className="loading">Loading overview…</div>;
@@ -82,15 +113,16 @@ export default function OverviewPage() {
     .sort((a, b) => b.amount - a.amount)
     .map(item => ({ label: item.name, value: item.amount }));
   const finance = monthly.financeSummary;
-  const financeOutflow = finance.salaries + finance.truckEmi + finance.autoEmi + finance.roomRent
-    + finance.savingsDeposit + finance.loanRepayments;
+  const financeOutflow = finance
+    ? finance.salaries + finance.truckEmi + finance.autoEmi + finance.roomRent + finance.savingsDeposit + finance.loanRepayments
+    : 0;
 
   return <section className="content">
     <div className="page-head">
       <div><h1>Overview</h1><p>Business performance at a glance.</p></div>
       <MonthYear year={year} month={month} onChange={(nextYear, nextMonth) => { setYear(nextYear); setMonth(nextMonth); }} />
     </div>
-    {(reconciliationError || reconciliationWarnings) && <section className="card reconciliation-alerts" aria-labelledby="reconciliation-alerts-heading">
+    {isOwner && (reconciliationError || reconciliationWarnings) && <section className="card reconciliation-alerts" aria-labelledby="reconciliation-alerts-heading">
       <div className="reconciliation-alerts-heading">
         <div><h2 id="reconciliation-alerts-heading">Account Reconciliation</h2><p>Checks for today and saved balance differences.</p></div>
         <Link href="/dashboard/reconciliation">Open reconciliation</Link>
@@ -118,7 +150,7 @@ export default function OverviewPage() {
       <KPI title="Monthly Expenses" value={currency(monthly.totalExpenses)} />
       <KPI title="Closing Balance" value={currency(monthly.totalBalance)} sub="Includes carried balance and monthly EMIs" />
     </div>
-    <section className="card finance-loan-summary" aria-labelledby="finance-loan-summary-heading">
+    {isOwner && finance && <section className="card finance-loan-summary" aria-labelledby="finance-loan-summary-heading">
       <div className="finance-loan-summary-heading">
         <div>
           <h2 id="finance-loan-summary-heading">Finance &amp; Loan Summary</h2>
@@ -143,7 +175,7 @@ export default function OverviewPage() {
           <div><dt>Savings balance</dt><dd>{currency(finance.savingsBalance)}</dd></div>
         </dl>
       </div>
-    </section>
+    </section>}
     <div className="grid chart-grid overview-charts">
       <DonutChart title="Sales Mix" segments={[
         { label: 'Online Sales', value: monthly.onlineSales },

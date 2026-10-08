@@ -13,7 +13,7 @@ const ownerLinks=[
 ] as const;
 const adminLinks=[
   ['/overview','Overview'],
-  ['/dashboard/monthly','Monthly Dashboard'],['/dashboard/yearly','Yearly Dashboard'],['/dashboard/reconciliation','Account Reconciliation'],
+  ['/dashboard/monthly','Monthly Dashboard'],['/dashboard/yearly','Yearly Dashboard'],
   ['/entries/daily','Daily Sales & Expenses'],['/entries/purchases','Weekly Purchases'],
   ['/import-export','Excel Import / Export']
 ] as const;

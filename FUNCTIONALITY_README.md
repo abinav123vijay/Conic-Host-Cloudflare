@@ -147,10 +147,10 @@ Settings are stored on the business document in `businesses`. Opening online and
 - Import: `POST /api/excel/import`
 - Export: `GET /api/excel/export`
 - Workbook parsing: `lib/excel/parse.ts`
-- Workbook generation and template/chart/formula updates: `lib/excel/export.ts`
+- Workbook generation, template/chart/formula updates, and the separate chart-bearing Analytics worksheet: `lib/excel/export.ts`
 - Template workbook: `data/templates/CONIC_Business_Tracker.xlsx`
 
-Import parses the workbook sheets and replaces daily and purchase transaction data for the configured business. If finance data is present in the workbook, it also replaces the monthly finance, loan, and vendor-return datasets. Export reads current MongoDB data, fills the workbook template, and returns an `.xlsx` download. Treat import as a data replacement operation, not as a merge.
+Import parses the workbook sheets and replaces daily and purchase transaction data for the configured business. If finance data is present in the workbook, it also replaces the monthly finance, loan, and vendor-return datasets. Export reads current MongoDB data, fills the workbook template, refreshes the Monthly Dashboard and Yearly Dashboard charts, and adds an `Analytics` worksheet with sales-to-purchases, sales-to-expenses, and net-margin ratios; current balances and pending purchases; month-over-month comparisons; online/cash expense-payment split; top vendor ranking and spend share; year-to-date totals; used daily-expense categories with amount/share; a dedicated savings deposits/balance section; detailed month data; January–December/annual totals; and charts for sales mix, expenses, vendors, annual totals, and yearly trends. The expense-payment split covers daily expense payments, salary/EMI/rent outflows, and loan repayments; purchase payments and savings deposits are tracked separately. Savings deposits and partner payouts are not duplicated in the monthly finance summary. The reconciliation comparison is included only for Owner exports. Treat import as a data replacement operation, not as a merge.
 
 ### Login, navigation, and access control
 
@@ -164,7 +164,7 @@ Import parses the workbook sheets and replaces daily and purchase transaction da
 - Route/page authorization: `proxy.ts`
 - Navigation, current role, and sign out: `components/Shell.tsx`
 
-Passwords are verified using scrypt hashes; the session token is HMAC-signed and stored in an HTTP-only cookie. The proxy applies role checks before protected routes run. Owner has full access; Admin has dashboard, entry, and Excel access but not Finance or Settings; Staff is limited to daily and purchase entry. The navigation menu is role-specific, but `proxy.ts` is the access-control boundary.
+Passwords are verified using scrypt hashes; the session token is HMAC-signed and stored in an HTTP-only cookie. The proxy applies role checks before protected routes run. Owner has full access; Admin has dashboard, entry, and Excel access but not Finance, Settings, or Account Reconciliation; Staff is limited to daily and purchase entry. Finance/loan summary data and reconciliation alerts on Overview are rendered only for Owners. The monthly dashboard API also omits the finance summary and finance-only expense categories for non-owners. The navigation menu is role-specific, but `proxy.ts` is the access-control boundary.
 
 ## 3. Balance and dashboard calculation rules
 

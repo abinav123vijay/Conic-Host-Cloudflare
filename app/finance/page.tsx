@@ -284,6 +284,7 @@ export default function FinancePage() {
   const savingsDepositedThisMonth = savingsDeposit + savingsEntriesTotal;
   const loanRepaymentsThisMonth=total(loans.flatMap(loan=>(loan.repayments||[]).filter(repayment=>repayment.date>=periodStart&&repayment.date<=periodEnd).map(repayment=>repayment.amount)));
   const monthlyOutflow = total([...salaries.map(item => item.amount), truckEmi, autoEmi, roomRent, savingsDepositedThisMonth, loanRepaymentsThisMonth]);
+  const monthlyPaymentsTotal = monthlyOutflow - savingsDepositedThisMonth;
   const salaryTotal = total(salaries.map(item => item.amount));
   const partnerPaymentsTotal = total(partnerPayments.map(item => item.amount));
   const loanOutstanding = total(loans.map(loan => loan.outstanding));
@@ -296,8 +297,6 @@ export default function FinancePage() {
     { date: truckEmiPaymentDate, type: 'Truck EMI', recipient: 'Truck finance', amount: truckEmi },
     { date: autoEmiPaymentDate, type: 'Auto EMI', recipient: 'Auto finance', amount: autoEmi },
     { date: periodEnd, type: 'Room rent', recipient: 'Room rent', amount: roomRent },
-    ...(savingsDeposit > 0 ? [{ date: periodEnd, type: 'Monthly savings', recipient: 'Savings', amount: savingsDeposit }] : []),
-    ...savingsEntries.map(entry => ({ date: entry.date, type: 'Savings deposit', recipient: entry.note || 'Savings', amount: entry.amount })),
     ...loans.flatMap(loan => (loan.repayments || []).filter(repayment => repayment.date >= periodStart && repayment.date <= periodEnd).map(repayment => ({ date: repayment.date, type: 'Loan repayment', recipient: loan.person, amount: repayment.amount })))
   ].filter(item => item.amount > 0);
   const monthlyOutflowMix=[
@@ -367,7 +366,7 @@ export default function FinancePage() {
         <div className="finance-list-heading"><h3>Salary paid this month</h3><button type="button" className="button secondary" onClick={() => setSalaries(items => [...items, { person: '', amount: 0, paymentDate: monthEndDate(year, month) }])}>+ Add salary</button></div>
         {salaries.length > 0 && <div className="finance-edit-list">{salaries.map((salary, index) => <div className="finance-edit-row finance-salary-row" key={`salary-${index}`}><label>Person<input value={salary.person} onChange={event => updateSalary(index, 'person', event.target.value)} /></label><label>Salary amount<input type="number" min="0" value={salary.amount} onChange={event => updateSalary(index, 'amount', event.target.value)} /></label><label>Salary payment date<input type="date" min={periodStart} max={periodEnd} value={salary.paymentDate || periodEnd} onChange={event => updateSalary(index, 'paymentDate', event.target.value)} /></label><button type="button" className="finance-remove" aria-label={`Remove salary ${index + 1}`} onClick={() => setSalaries(items => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}</div>}
       </>}
-      <div className="finance-payment-heading"><h3>Payments this month</h3><span>{money(monthlyOutflow)}</span></div>
+      <div className="finance-payment-heading"><h3>Payments this month</h3><span>{money(monthlyPaymentsTotal)}</span></div>
       <div className="table-wrap finance-table-wrap"><table><thead><tr><th>Payment date</th><th>Payment</th><th>Paid to</th><th>Amount</th></tr></thead><tbody>
         {monthlyPaymentRows.map((item, index) => <tr key={`${item.type}-${item.recipient}-${index}`}><td>{item.date}</td><td>{item.type}</td><td>{item.recipient}</td><td>{money(item.amount)}</td></tr>)}
         {monthlyPaymentRows.length === 0 && <tr><td colSpan={4} className="finance-empty">No payments recorded for this month.</td></tr>}

@@ -5,6 +5,8 @@ import { isValidBalanceDate } from '@/lib/dashboard/balance-as-of';
 
 type ReconciliationSummaryRecord = {
   date: string;
+  bookOnline: number;
+  bookCash: number;
   actualOnline: number;
   actualCash: number;
   varianceOnline: number;
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest) {
   const reconciliations = db.collection<ReconciliationSummaryRecord>('accountReconciliations');
   const mismatchFilter = {
     businessId: BUSINESS_ID,
-    $or: [{ varianceOnline: { $ne: 0 } }, { varianceCash: { $ne: 0 } }]
+    $expr: { $or: [{ $ne: ['$actualOnline', '$bookOnline'] }, { $ne: ['$actualCash', '$bookCash'] }] }
   };
   const [todayReconciliation, latest, mismatchCount, mismatches] = await Promise.all([
     reconciliations.findOne({ businessId: BUSINESS_ID, date: today }),
@@ -37,6 +39,10 @@ export async function GET(request: NextRequest) {
     todayReconciliation,
     latest,
     mismatchCount,
-    mismatches
+    mismatches: mismatches.map(item => ({
+      ...item,
+      varianceOnline: Number(item.actualOnline) - Number(item.bookOnline),
+      varianceCash: Number(item.actualCash) - Number(item.bookCash)
+    }))
   });
 }
