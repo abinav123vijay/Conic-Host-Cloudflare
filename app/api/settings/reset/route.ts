@@ -10,6 +10,7 @@ export async function POST() {
     'monthlyFinance',
     'financeLoans',
     'vendorDefectReturns',
+    'accountReconciliations',
     'auditLogs'
   ];
   const deleted = await Promise.all(collectionsToClear.map(async name => {

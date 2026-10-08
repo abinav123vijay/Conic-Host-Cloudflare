@@ -15,8 +15,11 @@ The MongoDB/Next.js integration follows MongoDB's official Next.js pattern: a sh
 
 ## Pages
 
-- `/dashboard/monthly` — monthly KPIs and analytics charts
+- Detailed functionality, source-file map, data flow, and balance rules: [FUNCTIONALITY_README.md](./FUNCTIONALITY_README.md)
+- `/overview` — performance dashboard with monthly finance/loan summary and reconciliation warnings
+- `/dashboard/monthly` — monthly KPIs, balance-as-of lookup, balance movement and analytics charts
 - `/dashboard/yearly` — January–December table and trend charts
+- `/dashboard/reconciliation` — compare verified bank and cash balances with recorded balances for a selected date; Overview warns when today is unreconciled or saved checks have differences
 - `/entries/daily` — daily sales and expense entry
 - `/entries/purchases` — weekly/vendor purchase entry and payment tracking
 - `/finance` — monthly salary, EMI, rent, savings, partner payouts, loans and vendor defect refunds (owner only)
@@ -32,6 +35,7 @@ The MongoDB/Next.js integration follows MongoDB's official Next.js pattern: a sh
 - `monthlyFinance`
 - `financeLoans`
 - `vendorDefectReturns`
+- `accountReconciliations`
 - `users`
 - `auditLogs`
 
@@ -51,6 +55,7 @@ See `mongodb/schema.json` for the MongoDB validators and indexes.
 - Vendor defect-return credits increase total balance only when receipts are recorded; pending credits remain separate.
 - Monthly balances roll forward automatically.
 - Yearly dashboard is the sum of the twelve monthly periods for the selected year.
+- Account reconciliations save verified online/cash balances, calculated balances, and any difference by date.
 
 ## Excel round trip
 

@@ -91,7 +91,7 @@ export async function getMonthlyDashboard(year: number, month: number): Promise<
   const latest = [...monthDaily].sort((a,b) => a.date.localeCompare(b.date)).at(-1);
   const latestBalance = latest ? flowsThrough(latest.date, daily, purchases, { online: settings.openingOnlineBalance, cash: settings.openingCashBalance }, finance, vendorReturns, loans).total : closing.total;
   const savingsBalance=sum(finance.map(item=>money(item.savingsDeposit)+sum((item.savingsEntries||[]).map(entry=>money(entry.amount)))-sum((item.partnerPayments||[]).map(payment=>money(payment.amount)))));
-  const loanOutstanding=sum(loans.map(loan=>money(loan.amountTaken)-sum((loan.repayments||[]).map(repayment=>money(repayment.amount)))));
+  const loanOutstanding=sum(loans.map(loan=>Math.max(0,money(loan.amountTaken)-sum((loan.repayments||[]).map(repayment=>money(repayment.amount))))));
   const endReceipts=vendorReturns.flatMap(item=>(item.receipts||[]).filter(receipt=>receipt.date<=end).map(receipt=>money(receipt.amount)));
   const vendorCreditsReceivedThisMonth=sum(vendorReturns.flatMap(item=>(item.receipts||[]).filter(receipt=>receipt.date>=start&&receipt.date<=end).map(receipt=>money(receipt.amount))));
   const vendorCreditsPending=Math.max(0,sum(vendorReturns.map(item=>money(item.amount)))-sum(endReceipts));

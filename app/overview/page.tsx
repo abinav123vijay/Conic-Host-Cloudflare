@@ -1,6 +1,7 @@
 'use client';
 
 import './overview.css';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BarChart, DonutChart, DonutChartContent, KPI, LineChart, MultiLineChart, StackedMetricChart } from '@/components/Charts';
 import { MonthYear } from '@/components/Controls';
@@ -12,6 +13,18 @@ const currency = (value: number) => new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 0
 }).format(value || 0);
 
+type ReconciliationWarningData = {
+  today: string;
+  reconciledToday: boolean;
+  latest: { date: string } | null;
+  mismatchCount: number;
+  mismatches: Array<{ date: string; varianceOnline: number; varianceCash: number }>;
+};
+
+function localISODate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export default function OverviewPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -19,6 +32,8 @@ export default function OverviewPage() {
   const [monthly, setMonthly] = useState<MonthlyDashboard | null>(null);
   const [yearly, setYearly] = useState<YearlyDashboard | null>(null);
   const [error, setError] = useState('');
+  const [reconciliationWarnings, setReconciliationWarnings] = useState<ReconciliationWarningData | null>(null);
+  const [reconciliationError, setReconciliationError] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
@@ -37,6 +52,23 @@ export default function OverviewPage() {
     return () => controller.abort();
   }, [year, month]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const today = localISODate(new Date());
+    setReconciliationError('');
+    fetch(`/api/reconciliation/summary?date=${today}`, { signal: controller.signal })
+      .then(async response => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Unable to load reconciliation warnings.');
+        return result as ReconciliationWarningData;
+      })
+      .then(setReconciliationWarnings)
+      .catch(loadError => {
+        if (loadError.name !== 'AbortError') setReconciliationError(loadError.message || 'Unable to load reconciliation warnings.');
+      });
+    return () => controller.abort();
+  }, []);
+
   if (error) return <section className="content"><div className="page-head"><div><h1>Overview</h1><p>Business performance at a glance.</p></div></div><div className="card table-card" role="alert">{error}</div></section>;
   if (!monthly || !yearly) return <div className="loading">Loading overview…</div>;
 
@@ -49,18 +81,69 @@ export default function OverviewPage() {
   const vendorPurchaseBars = [...monthly.vendorPurchases]
     .sort((a, b) => b.amount - a.amount)
     .map(item => ({ label: item.name, value: item.amount }));
+  const finance = monthly.financeSummary;
+  const financeOutflow = finance.salaries + finance.truckEmi + finance.autoEmi + finance.roomRent
+    + finance.savingsDeposit + finance.loanRepayments;
 
   return <section className="content">
     <div className="page-head">
       <div><h1>Overview</h1><p>Business performance at a glance.</p></div>
       <MonthYear year={year} month={month} onChange={(nextYear, nextMonth) => { setYear(nextYear); setMonth(nextMonth); }} />
     </div>
+    {(reconciliationError || reconciliationWarnings) && <section className="card reconciliation-alerts" aria-labelledby="reconciliation-alerts-heading">
+      <div className="reconciliation-alerts-heading">
+        <div><h2 id="reconciliation-alerts-heading">Account Reconciliation</h2><p>Checks for today and saved balance differences.</p></div>
+        <Link href="/dashboard/reconciliation">Open reconciliation</Link>
+      </div>
+      {reconciliationError && <p className="reconciliation-alert reconciliation-alert-error" role="alert">{reconciliationError}</p>}
+      {reconciliationWarnings && <div className="reconciliation-alert-list">
+        {!reconciliationWarnings.reconciledToday && <p className="reconciliation-alert" role="status">
+          No reconciliation has been saved for today ({reconciliationWarnings.today}).
+          {reconciliationWarnings.latest && ` Latest saved check: ${reconciliationWarnings.latest.date}.`}
+        </p>}
+        {reconciliationWarnings.mismatchCount > 0 && <>
+          <p className="reconciliation-alert" role="status">{reconciliationWarnings.mismatchCount} saved reconciliation{reconciliationWarnings.mismatchCount === 1 ? '' : 's'} have a non-zero balance difference.</p>
+          <ul>{reconciliationWarnings.mismatches.map(item => <li key={item.date}>
+            <Link href="/dashboard/reconciliation">{item.date}</Link>
+            {item.varianceOnline !== 0 && <span>Online: {currency(item.varianceOnline)}</span>}
+            {item.varianceCash !== 0 && <span>Cash: {currency(item.varianceCash)}</span>}
+          </li>)}</ul>
+        </>}
+        {reconciliationWarnings.reconciledToday && reconciliationWarnings.mismatchCount === 0 && <p className="reconciliation-clear" role="status">Today is reconciled and no saved balance differences were found.</p>}
+      </div>}
+    </section>}
     <div className="grid kpi-grid">
       <KPI title="Monthly Sales" value={currency(monthly.totalSales)} sub={`Online ${currency(monthly.onlineSales)} · Cash ${currency(monthly.cashSales)}`} />
       <KPI title="Monthly Purchases" value={currency(monthly.totalPurchases)} sub={`${currency(monthly.purchaseStatus.pending)} pending`} />
       <KPI title="Monthly Expenses" value={currency(monthly.totalExpenses)} />
       <KPI title="Closing Balance" value={currency(monthly.totalBalance)} sub="Includes carried balance and monthly EMIs" />
     </div>
+    <section className="card finance-loan-summary" aria-labelledby="finance-loan-summary-heading">
+      <div className="finance-loan-summary-heading">
+        <div>
+          <h2 id="finance-loan-summary-heading">Finance &amp; Loan Summary</h2>
+          <p>{new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} outflows and current balances</p>
+        </div>
+        <Link href="/finance">Open Finance</Link>
+      </div>
+      <div className="finance-loan-summary-content">
+        <div className="finance-loan-summary-total">
+          <span>Finance outflow this month</span>
+          <strong>{currency(financeOutflow)}</strong>
+          <small>Salary, EMIs, rent, savings and loan repayments</small>
+        </div>
+        <dl className="finance-loan-summary-details">
+          <div><dt>Salary</dt><dd>{currency(finance.salaries)}</dd></div>
+          <div><dt>Truck EMI</dt><dd>{currency(finance.truckEmi)}</dd></div>
+          <div><dt>Auto EMI</dt><dd>{currency(finance.autoEmi)}</dd></div>
+          <div><dt>Room rent</dt><dd>{currency(finance.roomRent)}</dd></div>
+          <div><dt>Savings deposited</dt><dd>{currency(finance.savingsDeposit)}</dd></div>
+          <div><dt>Loan repayments</dt><dd>{currency(finance.loanRepayments)}</dd></div>
+          <div><dt>Outstanding loans</dt><dd>{currency(finance.loanOutstanding)}</dd></div>
+          <div><dt>Savings balance</dt><dd>{currency(finance.savingsBalance)}</dd></div>
+        </dl>
+      </div>
+    </section>
     <div className="grid chart-grid overview-charts">
       <DonutChart title="Sales Mix" segments={[
         { label: 'Online Sales', value: monthly.onlineSales },
