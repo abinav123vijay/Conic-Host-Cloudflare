@@ -45,9 +45,9 @@ See `mongodb/schema.json` for the MongoDB validators and indexes.
 - Purchase payment can be online or cash.
 - A blank purchase payment date is treated as the purchase date for balance calculations.
 - Pending purchase = total purchase - online paid - cash paid.
-- Online/cash closing balances include sales, expense payments and purchase payments.
-- Monthly salaries, truck/auto EMIs, room rent, and savings deposits reduce combined total balance; they do not change online/cash subtotals.
-- Partner payouts reduce the savings ledger, not sales balance. Borrowed loan amounts stay separate; loan repayments reduce total balance.
+- Online/cash closing balances include their respective sales, daily expense payments, and purchase payments.
+- Salaries, truck/auto EMIs, room rent, savings deposits, and loan repayments reduce the online balance; cash-paid daily expenses and purchases reduce the cash balance.
+- Borrowed loan amounts are tracked as liabilities, not available balance. Partner payouts reduce the savings ledger, not the operating balance.
 - Vendor defect-return credits increase total balance only when receipts are recorded; pending credits remain separate.
 - Monthly balances roll forward automatically.
 - Yearly dashboard is the sum of the twelve monthly periods for the selected year.
@@ -67,7 +67,7 @@ The imported data replaces the current business dataset for the configured `CONI
 
 ### MongoDB → Excel
 
-`Export Excel Workbook` starts from `data/templates/CONIC_Business_Tracker.xlsx` (your current CONIC workbook) and writes the latest database data into it. The template is kept so the export remains compatible with the existing workbook layout, formulas and chart package.
+`Export Excel Workbook` starts from `data/templates/CONIC_Business_Tracker.xlsx` and writes all current database data into it. The dashboards open on the latest month and year containing records, with refreshed formula and chart caches so totals and analytics are visible immediately. The export includes formulas in the daily and purchase entry tables (including their blank input rows). Finance payment dates and dated savings entries are retained for import/export round trips.
 
 ## Setup
 

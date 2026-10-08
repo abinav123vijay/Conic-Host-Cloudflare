@@ -30,7 +30,11 @@ export function calculateBalancesThrough(
   const vendorRefunds = sum(vendorReturns.flatMap(item =>
     (item.receipts || []).filter(receipt => receipt.date <= date).map(receipt => amount(receipt.amount))
   ));
-  const online = opening.online + sum(dailyThrough.map(entry => amount(entry.onlineSales) - amount(entry.expensePaidOnline))) - sum(purchasesThrough.map(purchase => amount(purchase.onlinePurchasePaid)));
+  const online = opening.online
+    + sum(dailyThrough.map(entry => amount(entry.onlineSales) - amount(entry.expensePaidOnline)))
+    - sum(purchasesThrough.map(purchase => amount(purchase.onlinePurchasePaid)))
+    - financeOutflow
+    - loanRepayments;
   const cash = opening.cash + sum(dailyThrough.map(entry => amount(entry.cashSales) - amount(entry.expensePaidCash))) - sum(purchasesThrough.map(purchase => amount(purchase.cashPurchasePaid)));
-  return { online, cash, total: online + cash - financeOutflow - loanRepayments + vendorRefunds };
+  return { online, cash, total: online + cash + vendorRefunds };
 }

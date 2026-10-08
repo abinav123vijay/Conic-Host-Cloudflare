@@ -5,7 +5,7 @@ import { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_VENDORS } from '@/lib/constants';
 function toNumber(v: unknown) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 function toISODate(v: unknown): string | null {
   if (!v) return null;
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  if (v instanceof Date) return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')}`;
   if (typeof v === 'number') return XLSX.SSF.parse_date_code(v) ? (() => { const d = XLSX.SSF.parse_date_code(v); return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`; })() : null;
   const s = String(v).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
@@ -81,16 +81,23 @@ export function parseConicWorkbook(buffer: Buffer, businessId: string) {
     };
     for(const row of financeRows){
       const type=String(row?.[0]||'').trim(),dateOrPeriod=String(row?.[1]||'').trim(),name=String(row?.[2]||'').trim(),source=String(row?.[3]||'').trim();
-      const value=toNumber(row?.[4]),recordId=String(row?.[8]||'').trim();
+      const value=toNumber(row?.[4]),recordId=String(row?.[8]||'').trim(),paymentDate=toISODate(row?.[9])||undefined;
       if(!type)continue;
+      if(type==='Dated Savings Deposit'){
+        const date=toISODate(row?.[1])||paymentDate;
+        if(!date)continue;
+        const month=getMonth(date.slice(0,7));
+        if(month)month.savingsEntries=[...(month.savingsEntries||[]),{date,amount:value,note:String(row?.[7]||'')}];
+        continue;
+      }
       if(['Salary','Truck EMI','Auto EMI','Room Rent','Savings Deposit','Partner Payout'].includes(type)){
         const month=getMonth(dateOrPeriod);if(!month)continue;
-        if(type==='Salary'&&name)month.salaries.push({person:name,amount:value});
-        else if(type==='Truck EMI')month.truckEmi=value;
-        else if(type==='Auto EMI')month.autoEmi=value;
+        if(type==='Salary'&&name)month.salaries.push({person:name,amount:value,paymentDate});
+        else if(type==='Truck EMI'){month.truckEmi=value;month.truckEmiPaymentDate=paymentDate;}
+        else if(type==='Auto EMI'){month.autoEmi=value;month.autoEmiPaymentDate=paymentDate;}
         else if(type==='Room Rent')month.roomRent=value;
         else if(type==='Savings Deposit')month.savingsDeposit=value;
-        else if(type==='Partner Payout'&&name)month.partnerPayments.push({partner:name,amount:value});
+        else if(type==='Partner Payout'&&name)month.partnerPayments.push({partner:name,amount:value,paymentDate});
         continue;
       }
       if(type==='Loan Received'){
