@@ -13,18 +13,6 @@ const currency = (value: number) => new Intl.NumberFormat('en-IN', {
   maximumFractionDigits: 0
 }).format(value || 0);
 
-type ReconciliationWarningData = {
-  today: string;
-  reconciledToday: boolean;
-  latest: { date: string } | null;
-  mismatchCount: number;
-  mismatches: Array<{ date: string; varianceOnline: number; varianceCash: number }>;
-};
-
-function localISODate(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
 export default function OverviewPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -32,8 +20,6 @@ export default function OverviewPage() {
   const [monthly, setMonthly] = useState<MonthlyDashboard | null>(null);
   const [yearly, setYearly] = useState<YearlyDashboard | null>(null);
   const [error, setError] = useState('');
-  const [reconciliationWarnings, setReconciliationWarnings] = useState<ReconciliationWarningData | null>(null);
-  const [reconciliationError, setReconciliationError] = useState('');
   const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
@@ -67,39 +53,6 @@ export default function OverviewPage() {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    if (!isOwner) return;
-    const today = localISODate(new Date());
-    let activeRequest: AbortController | null = null;
-    const loadWarnings = () => {
-      activeRequest?.abort();
-      const controller = new AbortController();
-      activeRequest = controller;
-      setReconciliationError('');
-      fetch(`/api/reconciliation/summary?date=${today}`, { signal: controller.signal, cache: 'no-store' })
-        .then(async response => {
-          const result = await response.json();
-          if (!response.ok) throw new Error(result.error || 'Unable to load reconciliation warnings.');
-          return result as ReconciliationWarningData;
-        })
-        .then(setReconciliationWarnings)
-        .catch(loadError => {
-          if (loadError.name !== 'AbortError') setReconciliationError(loadError.message || 'Unable to load reconciliation warnings.');
-        });
-    };
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') loadWarnings();
-    };
-    loadWarnings();
-    window.addEventListener('focus', loadWarnings);
-    document.addEventListener('visibilitychange', refreshWhenVisible);
-    return () => {
-      activeRequest?.abort();
-      window.removeEventListener('focus', loadWarnings);
-      document.removeEventListener('visibilitychange', refreshWhenVisible);
-    };
-  }, [isOwner]);
-
   if (error) return <section className="content"><div className="page-head"><div><h1>Overview</h1><p>Business performance at a glance.</p></div></div><div className="card table-card" role="alert">{error}</div></section>;
   if (!monthly || !yearly) return <div className="loading">Loading overview…</div>;
 
@@ -122,28 +75,9 @@ export default function OverviewPage() {
       <div><h1>Overview</h1><p>Business performance at a glance.</p></div>
       <MonthYear year={year} month={month} onChange={(nextYear, nextMonth) => { setYear(nextYear); setMonth(nextMonth); }} />
     </div>
-    {isOwner && (reconciliationError || reconciliationWarnings) && <section className="card reconciliation-alerts" aria-labelledby="reconciliation-alerts-heading">
-      <div className="reconciliation-alerts-heading">
-        <div><h2 id="reconciliation-alerts-heading">Account Reconciliation</h2><p>Checks for today and saved balance differences.</p></div>
-        <Link href="/dashboard/reconciliation">Open reconciliation</Link>
-      </div>
-      {reconciliationError && <p className="reconciliation-alert reconciliation-alert-error" role="alert">{reconciliationError}</p>}
-      {reconciliationWarnings && <div className="reconciliation-alert-list">
-        {!reconciliationWarnings.reconciledToday && <p className="reconciliation-alert" role="status">
-          No reconciliation has been saved for today ({reconciliationWarnings.today}).
-          {reconciliationWarnings.latest && ` Latest saved check: ${reconciliationWarnings.latest.date}.`}
-        </p>}
-        {reconciliationWarnings.mismatchCount > 0 && <>
-          <p className="reconciliation-alert" role="status">{reconciliationWarnings.mismatchCount} saved reconciliation{reconciliationWarnings.mismatchCount === 1 ? '' : 's'} have a non-zero balance difference.</p>
-          <ul>{reconciliationWarnings.mismatches.map(item => <li key={item.date}>
-            <Link href="/dashboard/reconciliation">{item.date}</Link>
-            {item.varianceOnline !== 0 && <span>Online: {currency(item.varianceOnline)}</span>}
-            {item.varianceCash !== 0 && <span>Cash: {currency(item.varianceCash)}</span>}
-          </li>)}</ul>
-        </>}
-        {reconciliationWarnings.reconciledToday && reconciliationWarnings.mismatchCount === 0 && <p className="reconciliation-clear" role="status">Today is reconciled and no saved balance differences were found.</p>}
-      </div>}
-    </section>}
+    {isOwner && <nav className="overview-reconciliation-link" aria-label="Account reconciliation">
+      <Link href="/dashboard/reconciliation">Account Reconciliation</Link>
+    </nav>}
     <div className="grid kpi-grid">
       <KPI title="Monthly Sales" value={currency(monthly.totalSales)} sub={`Online ${currency(monthly.onlineSales)} · Cash ${currency(monthly.cashSales)}`} />
       <KPI title="Monthly Purchases" value={currency(monthly.totalPurchases)} sub={`${currency(monthly.purchaseStatus.pending)} pending`} />
