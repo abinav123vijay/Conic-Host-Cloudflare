@@ -22,7 +22,7 @@ type AdditionalFinanceData = {
   vendorReturns?: VendorDefectReturn[];
   reconciliations?: ReconciliationExport[];
 };
-type FinanceSheetRow = { type: string; dateOrPeriod: string | number; paymentDate?: string; name: string; source: string; amount: number; received: number; outstanding: number; notes: string; recordId: string };
+type FinanceSheetRow = { type: string; dateOrPeriod: string | number; paymentDate?: string; name: string; source: string; amount: number; received: number; outstanding: number; notes: string; recordId: string; paidOnline?: number; paidCash?: number };
 
 function excelSerial(iso: string | null | undefined) {
   if (!iso) return null;
@@ -142,7 +142,7 @@ function buildFinanceSheet(finance:AdditionalFinanceData){
     const period=month.period;
     const [year,monthNumber]=period.split('-').map(Number);
     const periodEnd=new Date(Date.UTC(year,monthNumber,0)).toISOString().slice(0,10);
-    for(const salary of month.salaries||[]) records.push({type:'Salary',dateOrPeriod:period,paymentDate:salary.paymentDate||periodEnd,name:salary.person,source:'',amount:Number(salary.amount||0),received:0,outstanding:0,notes:'',recordId:''});
+    for(const salary of month.salaries||[]) records.push({type:'Salary',dateOrPeriod:period,paymentDate:salary.paymentDate||periodEnd,name:salary.person,source:'',amount:Number(salary.amount||0),received:0,outstanding:0,notes:'',recordId:'',paidOnline:Number(salary.paidOnline??salary.amount??0),paidCash:Number(salary.paidCash||0)});
     for(const [type,amount,paymentDate] of [
       ['Truck EMI',month.truckEmi,month.truckEmiPaymentDate||periodEnd],
       ['Auto EMI',month.autoEmi,month.autoEmiPaymentDate||periodEnd],
@@ -164,11 +164,11 @@ function buildFinanceSheet(finance:AdditionalFinanceData){
     records.push({type:'Vendor Defect Return',dateOrPeriod:excelSerial(credit.returnDate)||0,name:credit.vendor,source:'',amount:Number(credit.amount||0),received,outstanding:Math.max(0,Number(credit.amount||0)-received),notes:credit.notes||'',recordId:id});
     for(const receipt of credit.receipts||[]) records.push({type:'Vendor Refund Received',dateOrPeriod:excelSerial(receipt.date)||0,name:credit.vendor,source:'',amount:Number(receipt.amount||0),received:0,outstanding:0,notes:'',recordId:id});
   }
-  const headers=['Record Type','Month / Date','Person / Vendor','Source','Amount','Repaid / Received','Remaining / Pending','Notes','Related Record ID','Payment Date'];
+  const headers=['Record Type','Month / Date','Person / Vendor','Source','Amount','Repaid / Received','Remaining / Pending','Notes','Related Record ID','Payment Date','Paid Online','Paid Cash'];
   const tableHeader=`<row r="3">${headers.map((header,index)=>cellText(`${excelColumn(index)}3`,header,'5')).join('')}</row>`;
-  const rows=records.map((record,index)=>{const row=index+4;const dateCell=typeof record.dateOrPeriod==='number'?cellNum(`B${row}`,record.dateOrPeriod,'17'):cellText(`B${row}`,record.dateOrPeriod,'12');return `<row r="${row}">${[cellText(`A${row}`,record.type,'12'),dateCell,cellText(`C${row}`,record.name,'12'),cellText(`D${row}`,record.source,'12'),cellNum(`E${row}`,record.amount,'18'),cellNum(`F${row}`,record.received,'18'),cellNum(`G${row}`,record.outstanding,'18'),cellText(`H${row}`,record.notes,'12'),cellText(`I${row}`,record.recordId,'12'),cellNum(`J${row}`,excelSerial(record.paymentDate),'17')].join('')}</row>`;}).join('');
+  const rows=records.map((record,index)=>{const row=index+4;const dateCell=typeof record.dateOrPeriod==='number'?cellNum(`B${row}`,record.dateOrPeriod,'17'):cellText(`B${row}`,record.dateOrPeriod,'12');return `<row r="${row}">${[cellText(`A${row}`,record.type,'12'),dateCell,cellText(`C${row}`,record.name,'12'),cellText(`D${row}`,record.source,'12'),cellNum(`E${row}`,record.amount,'18'),cellNum(`F${row}`,record.received,'18'),cellNum(`G${row}`,record.outstanding,'18'),cellText(`H${row}`,record.notes,'12'),cellText(`I${row}`,record.recordId,'12'),cellNum(`J${row}`,excelSerial(record.paymentDate),'17'),cellNum(`K${row}`,record.paidOnline??null,'18'),cellNum(`L${row}`,record.paidCash??null,'18')].join('')}</row>`;}).join('');
   const lastRow=Math.max(3,records.length+3);
-  return {xml:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:J${lastRow}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetData><row r="1">${cellText('A1','Additional Finance & Liabilities','5')}</row><row r="2">${cellText('A2','Finance costs, savings deposits, and loan repayments reduce online balance. Borrowed loan amounts are liabilities, not available balance.','12')}</row>${tableHeader}${rows}</sheetData></worksheet>`,lastRow};
+  return {xml:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:L${lastRow}"/><sheetViews><sheetView workbookViewId="0"/></sheetViews><sheetData><row r="1">${cellText('A1','Additional Finance & Liabilities','5')}</row><row r="2">${cellText('A2','Salary payments reduce the online and cash balances by their recorded split. Other finance costs and loan repayments reduce online balance. Borrowed loan amounts are liabilities, not available balance.','12')}</row>${tableHeader}${rows}</sheetData></worksheet>`,lastRow};
 }
 
 async function appendFinanceSheet(zip:JSZip,finance:AdditionalFinanceData){

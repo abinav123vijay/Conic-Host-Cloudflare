@@ -28,6 +28,7 @@ test('balance totals recalculate after transaction, finance, loan, and vendor re
     openingOnlineBalance: 1000,
     openingCashBalance: 500
   });
+
   const balance = () => getBalanceAsOf('2026-10-31');
   try {
     const dailyResponse = await postDaily(bodyRequest('http://localhost/api/daily', 'POST', {
@@ -105,6 +106,116 @@ test('balance totals recalculate after transaction, finance, loan, and vendor re
     assert.deepEqual(await balance(), { online: 890, cash: 500, total: 1400 });
     await deleteFinance(new NextRequest('http://localhost/api/finance?period=2026-10'));
     assert.deepEqual(await balance(), { online: 1000, cash: 500, total: 1510 });
+  } finally {
+    mongo.restore();
+  }
+});
+
+test('as-of balance reflects an edited salary payment date on that same date', async () => {
+  const mongo = installInMemoryMongo();
+  mongo.documents('businesses').push({
+    _id: BUSINESS_ID,
+    openingOnlineBalance: 60000,
+    openingCashBalance: 8000
+  });
+  const balanceDate = '2026-10-29';
+  const financeBody = {
+    period: '2026-10',
+    salaries: [{ person: 'Employee', amount: 15000, paidOnline: 14200, paidCash: 800, paymentDate: '2026-10-31' }],
+    truckEmi: 0,
+    autoEmi: 0,
+    roomRent: 0,
+    savingsDeposit: 0,
+    partnerPayments: []
+  };
+  try {
+    await putFinance(bodyRequest('http://localhost/api/finance', 'PUT', financeBody));
+    assert.deepEqual(await getBalanceAsOf(balanceDate), { online: 60000, cash: 8000, total: 68000 });
+
+    await putFinance(bodyRequest('http://localhost/api/finance', 'PUT', {
+      ...financeBody,
+      salaries: [{ ...financeBody.salaries[0], paymentDate: balanceDate }]
+    }));
+    assert.deepEqual(await getBalanceAsOf(balanceDate), { online: 45800, cash: 7200, total: 53000 });
+  } finally {
+    mongo.restore();
+  }
+});
+
+test('October demo flow balances sales, purchases, salary split, EMIs, savings, loan repayment, and refund', async () => {
+  const mongo = installInMemoryMongo();
+  mongo.documents('businesses').push({
+    _id: BUSINESS_ID,
+    openingOnlineBalance: 60000,
+    openingCashBalance: 8000
+  });
+  try {
+    const dailyResponse = await postDaily(bodyRequest('http://localhost/api/daily', 'POST', {
+      date: '2026-10-10',
+      onlineSales: 5000,
+      cashSales: 2000,
+      expenses: { Supplies: 600 },
+      expensePaidOnline: 400,
+      expensePaidCash: 200
+    }));
+    assert.equal(dailyResponse.status, 200);
+
+    const purchaseResponse = await postPurchase(bodyRequest('http://localhost/api/purchases', 'POST', {
+      purchaseDate: '2026-10-12',
+      paymentDate: '2026-10-12',
+      vendorAmounts: { VendorA: 10000 },
+      onlinePurchasePaid: 9000,
+      cashPurchasePaid: 500
+    }));
+    assert.equal(purchaseResponse.status, 200);
+
+    const financeResponse = await putFinance(bodyRequest('http://localhost/api/finance', 'PUT', {
+      period: '2026-10',
+      salaries: [{ person: 'Employee', amount: 15000, paidOnline: 14200, paidCash: 800, paymentDate: '2026-10-15' }],
+      truckEmi: 1000,
+      truckEmiPaymentDate: '2026-10-14',
+      autoEmi: 500,
+      autoEmiPaymentDate: '2026-10-20',
+      roomRent: 2000,
+      savingsDeposit: 700,
+      savingsEntries: [{ date: '2026-10-15', amount: 600, note: 'Demo savings' }],
+      partnerPayments: []
+    }));
+    assert.equal(financeResponse.status, 200);
+
+    const loanResponse = await postLoan(bodyRequest('http://localhost/api/finance/loans', 'POST', {
+      person: 'Lender',
+      source: 'friend',
+      amountTaken: 1000,
+      takenDate: '2026-10-01',
+      alreadyRepaid: 300,
+      repaymentDate: '2026-10-15'
+    }));
+    assert.equal(loanResponse.status, 201);
+
+    const vendorReturnResponse = await postVendorReturn(bodyRequest('http://localhost/api/finance/vendor-returns', 'POST', {
+      vendor: 'VendorA',
+      returnDate: '2026-10-13',
+      amount: 100
+    }));
+    assert.equal(vendorReturnResponse.status, 201);
+    const vendorReturn = await vendorReturnResponse.json() as { id: string };
+    const vendorReceiptResponse = await postVendorReceipt(bodyRequest('http://localhost/api/finance/vendor-returns', 'POST', {
+      date: '2026-10-15',
+      amount: 100
+    }), context(vendorReturn.id));
+    assert.equal(vendorReceiptResponse.status, 200);
+
+    assert.deepEqual(await getBalanceAsOf('2026-10-15'), {
+      online: 39500,
+      cash: 8500,
+      total: 48100
+    });
+    assert.deepEqual(await getBalanceAsOf('2026-10-31'), {
+      online: 36300,
+      cash: 8500,
+      total: 44900
+    });
   } finally {
     mongo.restore();
   }

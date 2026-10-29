@@ -72,7 +72,7 @@ const monthlyFinance: FinanceMonth[] = [
     period: '2026-10',
     year: 2026,
     month: 10,
-    salaries: [{ person: 'Employee', amount: 100, paymentDate: '2026-10-03' }],
+    salaries: [{ person: 'Employee', amount: 100, paidOnline: 75, paidCash: 25, paymentDate: '2026-10-03' }],
     truckEmi: 50,
     truckEmiPaymentDate: '2026-10-03',
     autoEmi: 30,
@@ -141,8 +141,8 @@ test('Excel export preserves dashboards and adds the five analytics sections wit
   assert.equal(cell(analytics, 'B5'), '25.0%');
   assert.equal(cell(analytics, 'B6'), '30.0%');
   assert.equal(cell(analytics, 'B7'), '45.0%');
-  assert.equal(cell(analytics, 'F5'), 510);
-  assert.equal(cell(analytics, 'F6'), 880);
+  assert.equal(cell(analytics, 'F5'), 535);
+  assert.equal(cell(analytics, 'F6'), 855);
   assert.equal(cell(analytics, 'F7'), 1425);
   assert.ok(findRow(rows, 'MONTH-OVER-MONTH COMPARISON') >= 0);
   assert.ok(findRow(rows, 'RECONCILIATION CHECK') >= 0);
@@ -214,6 +214,7 @@ test('export/import round trip retains daily entries, purchases, savings, loans 
   assert.equal(parsed.purchaseEntries.length, 2);
   assert.equal(parsed.purchaseEntries[1].vendorAmounts.VendorB, 100);
   const october = parsed.monthlyFinance.find(item => item.period === '2026-10');
+  assert.deepEqual(october?.salaries, [{ person: 'Employee', amount: 100, paidOnline: 75, paidCash: 25, paymentDate: '2026-10-03' }]);
   assert.equal(october?.savingsDeposit, 500);
   assert.deepEqual(october?.savingsEntries, [{ date: '2026-10-07', amount: 200, note: 'Dated savings' }]);
   assert.deepEqual(october?.partnerPayments, [{ partner: 'Partner', amount: 50, paymentDate: '2026-10-08' }]);

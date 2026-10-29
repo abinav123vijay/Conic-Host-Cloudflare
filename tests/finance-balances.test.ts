@@ -87,6 +87,29 @@ test('salary, EMI, rent, savings and loan repayment reduce online balance only o
   assert.deepEqual(monthEnd, { online: 545, cash: 545, total: 1090 });
 });
 
+test('salary payments reduce online and cash balances by their recorded split', () => {
+  const splitSalary: FinanceMonth[] = [{
+    businessId: 'test',
+    period: '2026-10',
+    year: 2026,
+    month: 10,
+    salaries: [{ person: 'Employee', amount: 15000, paidOnline: 14200, paidCash: 800, paymentDate: '2026-10-04' }],
+    truckEmi: 0,
+    autoEmi: 0,
+    roomRent: 0,
+    savingsDeposit: 0,
+    partnerPayments: []
+  }];
+  assert.deepEqual(
+    calculateBalancesThrough('2026-10-04', [], [], { online: 20000, cash: 1000 }, splitSalary),
+    { online: 5800, cash: 200, total: 6000 }
+  );
+  assert.deepEqual(
+    calculateBalancesThrough('2026-10-03', [], [], { online: 20000, cash: 1000 }, splitSalary),
+    { online: 20000, cash: 1000, total: 21000 }
+  );
+});
+
 test('borrowed principal does not increase available balance and vendor refunds increase total only when received', () => {
   const beforeReceipt = calculateBalancesThrough(
     '2026-10-05', daily, [], { online: 1000, cash: 500 }, [], vendorReturns, loans

@@ -13,6 +13,7 @@ export default function MonthlyPage(){
  const now=new Date();
  const [year,setYear]=useState(now.getFullYear());
  const [month,setMonth]=useState(now.getMonth()+1);
+ const monthEndLabel=new Date(Date.UTC(year,month,0)).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'});
  const [data,setData]=useState<MonthlyDashboard|null>(null);
  const [dashboardError,setDashboardError]=useState('');
  const [balanceDate,setBalanceDate]=useState(()=>localISODate(new Date()));
@@ -31,20 +32,32 @@ export default function MonthlyPage(){
 
  useEffect(()=>{
   let active=true;
-  setAsOfLoading(true);
-  setAsOfError('');
-  fetch(`/api/dashboard/balance?date=${encodeURIComponent(balanceDate)}`)
-   .then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not calculate the balance for this date.');return result.balances as BalanceAsOf;})
-   .then(balances=>{if(active)setAsOfBalances(balances);})
-   .catch(error=>{if(active){setAsOfBalances(null);setAsOfError(error instanceof Error?error.message:'Could not calculate the balance for this date.');}})
-   .finally(()=>{if(active)setAsOfLoading(false);});
-  return()=>{active=false;};
+  const loadBalances=()=>{
+   setAsOfLoading(true);
+   setAsOfError('');
+   fetch(`/api/dashboard/balance?date=${encodeURIComponent(balanceDate)}`,{cache:'no-store'})
+    .then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not calculate the balance for this date.');return result.balances as BalanceAsOf;})
+    .then(balances=>{if(active)setAsOfBalances(balances);})
+    .catch(error=>{if(active){setAsOfBalances(null);setAsOfError(error instanceof Error?error.message:'Could not calculate the balance for this date.');}})
+    .finally(()=>{if(active)setAsOfLoading(false);});
+  };
+  const refreshOnReturn=()=>{if(document.visibilityState==='visible')loadBalances();};
+  loadBalances();
+  window.addEventListener('focus',refreshOnReturn);
+  window.addEventListener('pageshow',refreshOnReturn);
+  document.addEventListener('visibilitychange',refreshOnReturn);
+  return()=>{
+   active=false;
+   window.removeEventListener('focus',refreshOnReturn);
+   window.removeEventListener('pageshow',refreshOnReturn);
+   document.removeEventListener('visibilitychange',refreshOnReturn);
+  };
  },[balanceDate]);
 
  if(!data&&!dashboardError)return <div className="loading">Loading dashboard…</div>;
  if(!data)return <section className="content"><p className="as-of-error" role="alert">{dashboardError}</p></section>;
  return <section className="content">
-  <div className="page-head"><div><h1>Monthly Dashboard</h1><p>Sales, purchases, expenses and balances for the selected month.</p></div><MonthYear year={year} month={month} onChange={(y,m)=>{setYear(y);setMonth(m)}}/></div>
+  <div className="page-head"><div><h1>Monthly Dashboard</h1><p>Monthly totals and closing balances through {monthEndLabel}.</p></div><MonthYear year={year} month={month} onChange={(y,m)=>{setYear(y);setMonth(m)}}/></div>
   <section className="card as-of-card" aria-labelledby="as-of-heading">
    <div className="as-of-heading"><div><h2 id="as-of-heading">Balance as of</h2><p>Calculated from all recorded transactions through the selected date.</p></div><label>Date<input type="date" value={balanceDate} onChange={event=>setBalanceDate(event.target.value)}/></label></div>
    {asOfError&&<p className="as-of-error" role="alert">{asOfError}</p>}
@@ -54,7 +67,7 @@ export default function MonthlyPage(){
     <KPI title="Total Balance" value={asOfLoading?'Calculating…':asOfBalances?money(asOfBalances.total):'—'}/>
    </div>
   </section>
-  <div className="grid kpi-grid"><KPI title="Total Sales" value={money(data.totalSales)} sub={`Online ${money(data.onlineSales)} • Cash ${money(data.cashSales)}`}/><KPI title="Total Purchases" value={money(data.totalPurchases)}/><KPI title="Total Expenses" value={money(data.totalExpenses)}/><KPI title="Net Amount" value={money(data.netAmount)}/><KPI title="Online Balance" value={money(data.onlineBalance)}/><KPI title="Cash Balance" value={money(data.cashBalance)}/><KPI title="Total Balance" value={money(data.totalBalance)}/><KPI title="Latest Day" value={data.latestDay.date||'—'} sub={money(data.latestDay.sales)}/></div>
+  <div className="grid kpi-grid"><KPI title="Total Sales" value={money(data.totalSales)} sub={`Online ${money(data.onlineSales)} • Cash ${money(data.cashSales)}`}/><KPI title="Total Purchases" value={money(data.totalPurchases)}/><KPI title="Total Expenses" value={money(data.totalExpenses)}/><KPI title="Net Amount" value={money(data.netAmount)}/><KPI title="Month-end Online Balance" value={money(data.onlineBalance)}/><KPI title="Month-end Cash Balance" value={money(data.cashBalance)}/><KPI title="Month-end Total Balance" value={money(data.totalBalance)}/><KPI title="Latest Day" value={data.latestDay.date||'—'} sub={money(data.latestDay.sales)}/></div>
   <div className="grid chart-grid"><LineChart title="Daily Sales Trend" data={data.daily.map(x=>({label:x.label,value:x.sales}))}/><StackedMetricChart title="Daily Sales vs Expenses" data={data.daily.map(x=>({label:x.label,sales:x.sales,purchases:0,expenses:x.expenses}))}/><DonutChart title="Online vs Cash Sales" segments={[{label:'Online',value:data.onlineSales},{label:'Cash',value:data.cashSales}]}/><BarChart title="Expense Category Breakdown" data={data.expenseBreakdown.map(item=>({label:item.name,value:item.amount}))}/><BarChart title="Vendor Purchase Share" data={data.vendorPurchases.map(item=>({label:item.name,value:item.amount}))}/><DonutChart title="Purchase Status" segments={[{label:'Paid',value:data.purchaseStatus.paid},{label:'Pending',value:data.purchaseStatus.pending}]}/><MultiLineChart title="Balance Movement" data={data.daily.map(x=>({label:x.label,online:x.onlineBalance,cash:x.cashBalance,total:x.balance}))} series={[{key:'online',label:'Online / Bank',color:'#1f4e79'},{key:'cash',label:'Cash in Hand',color:'#0f766e'},{key:'total',label:'Total Balance',color:'#d97706'}]}/></div>
  </section>;
 }

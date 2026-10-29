@@ -38,7 +38,7 @@ export type PurchaseEntry = {
   updatedAt?: string;
 };
 
-export type SalaryPayment = { person: string; amount: number; paymentDate?: string };
+export type SalaryPayment = { person: string; amount: number; paidOnline?: number; paidCash?: number; paymentDate?: string };
 export type PartnerSavingsPayment = { partner: string; amount: number; paymentDate?: string };
 export type SavingsDeposit = { date: string; amount: number; note?: string };
 export type FinanceMonth = {

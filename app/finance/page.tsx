@@ -79,7 +79,12 @@ export default function FinancePage() {
     setEditingPartnerPayments(!data.isSaved);
     setEditingSavings(!data.isSaved);
     const periodEnd = monthEndDate(year, month);
-    setSalaries((data.finance.salaries || []).map(salary => ({ ...salary, paymentDate: salary.paymentDate || periodEnd })));
+    setSalaries((data.finance.salaries || []).map(salary => ({
+      ...salary,
+      paidOnline: salary.paidOnline ?? salary.amount,
+      paidCash: salary.paidCash ?? 0,
+      paymentDate: salary.paymentDate || periodEnd
+    })));
     setPartnerPayments((data.finance.partnerPayments || []).map(payment => ({ ...payment, paymentDate: payment.paymentDate || periodEnd })));
     setSavingsEntries(data.finance.savingsEntries || []);
     setTruckEmi(data.finance.truckEmi || 0);
@@ -105,8 +110,13 @@ export default function FinancePage() {
     load().catch(loadError => setError(loadError.message || 'Could not load finance records.'));
   }, [year, month]);
 
-  const updateSalary = (index: number, field: keyof SalaryPayment, value: string) => {
-    setSalaries(current => current.map((salary, itemIndex) => itemIndex === index ? { ...salary, [field]: field === 'amount' ? Number(value) : value } : salary));
+  const updateSalary = (index: number, field: 'person' | 'paymentDate' | 'paidOnline' | 'paidCash', value: string) => {
+    setSalaries(current => current.map((salary, itemIndex) => {
+      if (itemIndex !== index) return salary;
+      if (field === 'person' || field === 'paymentDate') return { ...salary, [field]: value };
+      const updatedSalary = { ...salary, [field]: Number(value) };
+      return { ...updatedSalary, amount: Number(updatedSalary.paidOnline || 0) + Number(updatedSalary.paidCash || 0) };
+    }));
   };
 
   const updatePartnerPayment = (index: number, field: keyof PartnerSavingsPayment, value: string) => {
@@ -293,11 +303,11 @@ export default function FinancePage() {
   const truckEmiPending = Math.max(0, truckEmiTotal - truckEmiPaid);
   const autoEmiPending = Math.max(0, autoEmiTotal - autoEmiPaid);
   const monthlyPaymentRows = [
-    ...salaries.filter(item => item.amount > 0).map(item => ({ date: item.paymentDate || periodEnd, type: 'Salary', recipient: item.person || 'Salary', amount: item.amount })),
-    { date: truckEmiPaymentDate, type: 'Truck EMI', recipient: 'Truck finance', amount: truckEmi },
-    { date: autoEmiPaymentDate, type: 'Auto EMI', recipient: 'Auto finance', amount: autoEmi },
-    { date: periodEnd, type: 'Room rent', recipient: 'Room rent', amount: roomRent },
-    ...loans.flatMap(loan => (loan.repayments || []).filter(repayment => repayment.date >= periodStart && repayment.date <= periodEnd).map(repayment => ({ date: repayment.date, type: 'Loan repayment', recipient: loan.person, amount: repayment.amount })))
+    ...salaries.filter(item => item.amount > 0).map(item => ({ date: item.paymentDate || periodEnd, type: 'Salary', recipient: item.person || 'Salary', online: item.paidOnline ?? item.amount, cash: item.paidCash ?? 0, amount: item.amount })),
+    { date: truckEmiPaymentDate, type: 'Truck EMI', recipient: 'Truck finance', online: truckEmi, cash: 0, amount: truckEmi },
+    { date: autoEmiPaymentDate, type: 'Auto EMI', recipient: 'Auto finance', online: autoEmi, cash: 0, amount: autoEmi },
+    { date: periodEnd, type: 'Room rent', recipient: 'Room rent', online: roomRent, cash: 0, amount: roomRent },
+    ...loans.flatMap(loan => (loan.repayments || []).filter(repayment => repayment.date >= periodStart && repayment.date <= periodEnd).map(repayment => ({ date: repayment.date, type: 'Loan repayment', recipient: loan.person, online: repayment.amount, cash: 0, amount: repayment.amount })))
   ].filter(item => item.amount > 0);
   const monthlyOutflowMix=[
     {label:'Salary',value:total(salaries.map(item=>item.amount))},
@@ -363,13 +373,13 @@ export default function FinancePage() {
         <label>Savings deposited<input type="number" min="0" disabled={!editingMonth} value={savingsDeposit} onChange={event => setSavingsDeposit(Number(event.target.value))} /></label>
       </div>
       {editingMonth && <>
-        <div className="finance-list-heading"><h3>Salary paid this month</h3><button type="button" className="button secondary" onClick={() => setSalaries(items => [...items, { person: '', amount: 0, paymentDate: monthEndDate(year, month) }])}>+ Add salary</button></div>
-        {salaries.length > 0 && <div className="finance-edit-list">{salaries.map((salary, index) => <div className="finance-edit-row finance-salary-row" key={`salary-${index}`}><label>Person<input value={salary.person} onChange={event => updateSalary(index, 'person', event.target.value)} /></label><label>Salary amount<input type="number" min="0" value={salary.amount} onChange={event => updateSalary(index, 'amount', event.target.value)} /></label><label>Salary payment date<input type="date" min={periodStart} max={periodEnd} value={salary.paymentDate || periodEnd} onChange={event => updateSalary(index, 'paymentDate', event.target.value)} /></label><button type="button" className="finance-remove" aria-label={`Remove salary ${index + 1}`} onClick={() => setSalaries(items => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}</div>}
+        <div className="finance-list-heading"><h3>Salary paid this month</h3><button type="button" className="button secondary" onClick={() => setSalaries(items => [...items, { person: '', amount: 0, paidOnline: 0, paidCash: 0, paymentDate: monthEndDate(year, month) }])}>+ Add salary</button></div>
+        {salaries.length > 0 && <div className="finance-edit-list">{salaries.map((salary, index) => <div className="finance-edit-row finance-salary-payment-row" key={`salary-${index}`}><label>Person<input value={salary.person} onChange={event => updateSalary(index, 'person', event.target.value)} /></label><label>Paid online<input type="number" min="0" step="0.01" value={salary.paidOnline ?? salary.amount} onChange={event => updateSalary(index, 'paidOnline', event.target.value)} /></label><label>Paid in cash<input type="number" min="0" step="0.01" value={salary.paidCash ?? 0} onChange={event => updateSalary(index, 'paidCash', event.target.value)} /></label><label>Total salary<input type="number" value={salary.amount} readOnly /></label><label>Salary payment date<input type="date" min={periodStart} max={periodEnd} value={salary.paymentDate || periodEnd} onChange={event => updateSalary(index, 'paymentDate', event.target.value)} /></label><button type="button" className="finance-remove" aria-label={`Remove salary ${index + 1}`} onClick={() => setSalaries(items => items.filter((_, itemIndex) => itemIndex !== index))}>Remove</button></div>)}</div>}
       </>}
       <div className="finance-payment-heading"><h3>Payments this month</h3><span>{money(monthlyPaymentsTotal)}</span></div>
-      <div className="table-wrap finance-table-wrap"><table><thead><tr><th>Payment date</th><th>Payment</th><th>Paid to</th><th>Amount</th></tr></thead><tbody>
-        {monthlyPaymentRows.map((item, index) => <tr key={`${item.type}-${item.recipient}-${index}`}><td>{item.date}</td><td>{item.type}</td><td>{item.recipient}</td><td>{money(item.amount)}</td></tr>)}
-        {monthlyPaymentRows.length === 0 && <tr><td colSpan={4} className="finance-empty">No payments recorded for this month.</td></tr>}
+      <div className="table-wrap finance-table-wrap"><table><thead><tr><th>Payment date</th><th>Payment</th><th>Paid to</th><th>Online</th><th>Cash</th><th>Total</th></tr></thead><tbody>
+        {monthlyPaymentRows.map((item, index) => <tr key={`${item.type}-${item.recipient}-${index}`}><td>{item.date}</td><td>{item.type}</td><td>{item.recipient}</td><td>{money(item.online)}</td><td>{money(item.cash)}</td><td>{money(item.amount)}</td></tr>)}
+        {monthlyPaymentRows.length === 0 && <tr><td colSpan={6} className="finance-empty">No payments recorded for this month.</td></tr>}
       </tbody></table></div>
       {editingMonth && <div className="finance-save-row"><span>Monthly balance reduction: <b>{money(monthlyOutflow)}</b></span><button onClick={saveMonthly} disabled={saving}>{saving ? 'Saving...' : 'Save monthly finance'}</button></div>}
     </section>

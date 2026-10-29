@@ -53,7 +53,10 @@ test('finance API saves monthly records and retrieves persisted salaries, EMI an
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         period: '2026-10',
-        salaries: [{ person: 'Employee A', amount: 300, paymentDate: '2026-10-05' }],
+        salaries: [
+          { person: 'Employee A', amount: 300, paidOnline: 250, paidCash: 50, paymentDate: '2026-10-05' },
+          { person: 'Employee B', amount: 100, paymentDate: '2026-10-06' }
+        ],
         truckEmi: 100,
         truckEmiPaymentDate: '2026-10-06',
         autoEmi: 40,
@@ -75,7 +78,8 @@ test('finance API saves monthly records and retrieves persisted salaries, EMI an
     assert.equal(result.isSaved, true);
     assert.equal(result.finance.businessId, BUSINESS_ID);
     assert.deepEqual(result.finance.salaries, [
-      { person: 'Employee A', amount: 300, paymentDate: '2026-10-05' }
+      { person: 'Employee A', amount: 300, paidOnline: 250, paidCash: 50, paymentDate: '2026-10-05' },
+      { person: 'Employee B', amount: 100, paidOnline: 100, paidCash: 0, paymentDate: '2026-10-06' }
     ]);
     assert.equal(result.finance.truckEmi, 100);
     assert.equal(result.finance.autoEmi, 40);
@@ -83,6 +87,28 @@ test('finance API saves monthly records and retrieves persisted salaries, EMI an
       { date: '2026-10-08', amount: 50, note: 'Additional deposit' }
     ]);
     assert.equal(result.savingsBalance, 230);
+  } finally {
+    restoreDatabase();
+  }
+});
+
+test('finance API rejects salary splits that do not equal the salary total', async () => {
+  const restoreDatabase = installFinanceDatabase();
+  try {
+    const response = await putFinance(new Request('http://localhost/api/finance', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        period: '2026-10',
+        salaries: [{ person: 'Employee A', amount: 15000, paidOnline: 14200, paidCash: 700, paymentDate: '2026-10-05' }],
+        truckEmi: 0,
+        autoEmi: 0,
+        roomRent: 0,
+        savingsDeposit: 0,
+        partnerPayments: []
+      })
+    }));
+    assert.equal(response.status, 400);
   } finally {
     restoreDatabase();
   }

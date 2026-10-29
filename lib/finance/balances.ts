@@ -17,12 +17,20 @@ export function calculateBalancesThrough(
   const financeOutflow = sum(finance.map(entry => {
     const [year, month] = entry.period.split('-').map(Number);
     const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-    const salaryPayments = sum((entry.salaries || []).filter(salary => (salary.paymentDate || periodEnd) <= date).map(salary => amount(salary.amount)));
+    const datedSalaries = (entry.salaries || []).filter(salary => (salary.paymentDate || periodEnd) <= date);
+    const salaryPaymentsOnline = sum(datedSalaries.map(salary => amount(salary.paidOnline ?? salary.amount)));
     const truckEmi = (entry.truckEmiPaymentDate || periodEnd) <= date ? amount(entry.truckEmi) : 0;
     const autoEmi = (entry.autoEmiPaymentDate || periodEnd) <= date ? amount(entry.autoEmi) : 0;
     const monthEndOutflows = periodEnd <= date ? amount(entry.roomRent) + amount(entry.savingsDeposit) : 0;
     const datedSavings = sum((entry.savingsEntries || []).filter(item => item.date <= date).map(item => amount(item.amount)));
-    return salaryPayments + truckEmi + autoEmi + monthEndOutflows + datedSavings;
+    return salaryPaymentsOnline + truckEmi + autoEmi + monthEndOutflows + datedSavings;
+  }));
+  const salaryCashOutflow = sum(finance.map(entry => {
+    const [year, month] = entry.period.split('-').map(Number);
+    const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+    return sum((entry.salaries || [])
+      .filter(salary => (salary.paymentDate || periodEnd) <= date)
+      .map(salary => amount(salary.paidCash)));
   }));
   const loanRepayments = sum(loans.flatMap(loan =>
     (loan.repayments || []).filter(repayment => repayment.date <= date).map(repayment => amount(repayment.amount))
@@ -35,6 +43,6 @@ export function calculateBalancesThrough(
     - sum(purchasesThrough.map(purchase => amount(purchase.onlinePurchasePaid)))
     - financeOutflow
     - loanRepayments;
-  const cash = opening.cash + sum(dailyThrough.map(entry => amount(entry.cashSales) - amount(entry.expensePaidCash))) - sum(purchasesThrough.map(purchase => amount(purchase.cashPurchasePaid)));
+  const cash = opening.cash + sum(dailyThrough.map(entry => amount(entry.cashSales) - amount(entry.expensePaidCash))) - sum(purchasesThrough.map(purchase => amount(purchase.cashPurchasePaid))) - salaryCashOutflow;
   return { online, cash, total: online + cash + vendorRefunds };
 }

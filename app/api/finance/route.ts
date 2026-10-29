@@ -77,7 +77,18 @@ export async function PUT(request: Request) {
   const collection = db.collection<FinanceMonth>('monthlyFinance');
   const existing = await collection.find({ businessId: BUSINESS_ID }).toArray();
   const current = existing.find(item => item.period === period);
-  const salaries: SalaryPayment[] = Array.isArray(body.salaries) ? body.salaries.map(item => ({ person: String(item.person || '').trim(), amount: amount(item.amount), paymentDate: item.paymentDate || periodEnd })) : [];
+  const salaries: SalaryPayment[] = Array.isArray(body.salaries) ? body.salaries.map(item => {
+    const hasPaymentSplit = item.paidOnline !== undefined || item.paidCash !== undefined;
+    const paidOnline = amount(hasPaymentSplit ? item.paidOnline ?? 0 : item.amount);
+    const paidCash = amount(hasPaymentSplit ? item.paidCash ?? 0 : 0);
+    return {
+      person: String(item.person || '').trim(),
+      amount: amount(item.amount),
+      paidOnline,
+      paidCash,
+      paymentDate: item.paymentDate || periodEnd
+    };
+  }) : [];
   const partnerPayments: PartnerSavingsPayment[] = Array.isArray(body.partnerPayments) ? body.partnerPayments.map(item => ({ partner: String(item.partner || '').trim(), amount: amount(item.amount), paymentDate: item.paymentDate || periodEnd })) : [];
   const savingsEntries: SavingsDeposit[] = Array.isArray(body.savingsEntries) ? body.savingsEntries.map(item => ({ date: String(item.date || ''), amount: amount(item.amount), note: String(item.note || '').trim() })) : current?.savingsEntries || [];
   const truckEmi = amount(body.truckEmi), autoEmi = amount(body.autoEmi), roomRent = amount(body.roomRent), savingsDeposit = amount(body.savingsDeposit);
@@ -85,7 +96,7 @@ export async function PUT(request: Request) {
   const autoEmiPaymentDate = String(body.autoEmiPaymentDate || periodEnd);
   const isValidDate = (value: string) => validDate(value);
   const dateInPeriod = (value: string) => isValidDate(value) && value >= periodStart && value <= periodEnd;
-  if ([...salaries.map(item => item.amount), ...partnerPayments.map(item => item.amount), ...savingsEntries.map(item => item.amount), truckEmi, autoEmi, roomRent, savingsDeposit].some(value => !Number.isFinite(value)) || salaries.some(item => (item.amount > 0 && !item.person) || !dateInPeriod(item.paymentDate || '')) || partnerPayments.some(item => (item.amount > 0 && !item.partner) || !dateInPeriod(item.paymentDate || '')) || !validSavingsEntries(savingsEntries, periodStart, periodEnd) || !dateInPeriod(truckEmiPaymentDate) || !dateInPeriod(autoEmiPaymentDate)) {
+  if ([...salaries.flatMap(item => [item.amount, item.paidOnline, item.paidCash]), ...partnerPayments.map(item => item.amount), ...savingsEntries.map(item => item.amount), truckEmi, autoEmi, roomRent, savingsDeposit].some(value => !Number.isFinite(value)) || salaries.some(item => Math.abs(item.amount - Number(item.paidOnline) - Number(item.paidCash)) > 0.000001 || (item.amount > 0 && !item.person) || !dateInPeriod(item.paymentDate || '')) || partnerPayments.some(item => (item.amount > 0 && !item.partner) || !dateInPeriod(item.paymentDate || '')) || !validSavingsEntries(savingsEntries, periodStart, periodEnd) || !dateInPeriod(truckEmiPaymentDate) || !dateInPeriod(autoEmiPaymentDate)) {
     return NextResponse.json({ error: 'Enter valid names, payment dates, and non-negative amounts.' }, { status: 400 });
   }
   const replacement: FinanceMonth = { businessId: BUSINESS_ID, period, year, month, salaries, truckEmi, truckEmiPaymentDate, autoEmi, autoEmiPaymentDate, roomRent, savingsDeposit, savingsEntries, partnerPayments };

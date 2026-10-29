@@ -115,7 +115,11 @@ export function parseConicWorkbook(buffer: Buffer, businessId: string) {
       }
       if(['Salary','Truck EMI','Auto EMI','Room Rent','Savings Deposit','Partner Payout'].includes(type)){
         const month=getMonth(dateOrPeriod);if(!month)continue;
-        if(type==='Salary'&&name)month.salaries.push({person:name,amount:value,paymentDate});
+        if(type==='Salary'&&name){
+          const paidOnline=row?.[10]===null||row?.[10]===undefined?value:toNumber(row[10], `Paid Online on Additional Finance row ${rowNumber}`);
+          const paidCash=row?.[11]===null||row?.[11]===undefined?0:toNumber(row[11], `Paid Cash on Additional Finance row ${rowNumber}`);
+          month.salaries.push({person:name,amount:value,paidOnline,paidCash,paymentDate});
+        }
         else if(type==='Truck EMI'){month.truckEmi=value;month.truckEmiPaymentDate=paymentDate;}
         else if(type==='Auto EMI'){month.autoEmi=value;month.autoEmiPaymentDate=paymentDate;}
         else if(type==='Room Rent')month.roomRent=value;
