@@ -222,6 +222,21 @@ test('export/import round trip retains daily entries, purchases, savings, loans 
   assert.equal(parsed.vendorDefectReturns[0].receipts[0].amount, 35);
 });
 
+test('daily salary expense survives Excel export and import without a configured expense category', async () => {
+  const dailyWithSalary = daily.map((entry, index) => index === 1
+    ? { ...entry, expenses: { ...entry.expenses, Salary: 75 } }
+    : entry);
+  const output = await buildWorkbookFromData(
+    fs.readFileSync(templatePath),
+    dailyWithSalary,
+    purchases,
+    settings,
+    { months: monthlyFinance, loans, vendorReturns }
+  );
+  const parsed = parseConicWorkbook(output, businessId);
+  assert.equal(parsed.dailyEntries.find(entry => entry.date === '2026-10-03')?.expenses.Salary, 75);
+});
+
 test('end-to-end ledger balances and reconciliation values agree with the exported workbook', async () => {
   const closing = calculateBalancesThrough(
     '2026-10-31',

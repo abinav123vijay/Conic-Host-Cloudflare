@@ -12,6 +12,7 @@ import { POST as postVendorReturn } from '../app/api/finance/vendor-returns/rout
 import { POST as postVendorReceipt } from '../app/api/finance/vendor-returns/[id]/route';
 import { BUSINESS_ID } from '../lib/constants';
 import { getBalanceAsOf } from '../lib/dashboard/balance-as-of';
+import { getMonthlyDashboard } from '../lib/dashboard/metrics';
 import { installInMemoryMongo } from './helpers/in-memory-mongodb';
 
 const bodyRequest = (url: string, method: string, body: unknown) => new Request(url, {
@@ -137,6 +138,40 @@ test('as-of balance reflects an edited salary payment date on that same date', a
       salaries: [{ ...financeBody.salaries[0], paymentDate: balanceDate }]
     }));
     assert.deepEqual(await getBalanceAsOf(balanceDate), { online: 45800, cash: 7200, total: 53000 });
+  } finally {
+    mongo.restore();
+  }
+});
+
+test('daily salary is included in expenses and balance reflects entered payment sources', async () => {
+  const mongo = installInMemoryMongo();
+  mongo.documents('businesses').push({
+    _id: BUSINESS_ID,
+    openingOnlineBalance: 10000,
+    openingCashBalance: 5000,
+    expenseCategories: ['Food']
+  });
+  try {
+    const response = await postDaily(bodyRequest('http://localhost/api/daily', 'POST', {
+      date: '2026-10-10',
+      onlineSales: 1000,
+      cashSales: 500,
+      expenses: { Food: 200, Salary: 1000 },
+      expensePaidOnline: 700,
+      expensePaidCash: 500
+    }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(await getBalanceAsOf('2026-10-10'), {
+      online: 10300,
+      cash: 5000,
+      total: 15300
+    });
+
+    const dashboard = await getMonthlyDashboard(2026, 10);
+    assert.equal(dashboard.totalExpenses, 1200);
+    assert.equal(dashboard.netAmount, 300);
+    assert.equal(dashboard.expenseBreakdown.find(item => item.name === 'Salary')?.amount, 1000);
+    assert.equal(dashboard.financeSummary?.salaries, 1000);
   } finally {
     mongo.restore();
   }

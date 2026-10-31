@@ -74,19 +74,23 @@ test('daily entry UI supports submit, edit, confirmed delete, and refreshed rows
     fireEvent.change(screen.getByLabelText('Online Sales'), { target: { value: '1200' } });
     fireEvent.change(screen.getByLabelText('Cash Sales'), { target: { value: '300' } });
     fireEvent.change(screen.getByLabelText('Food'), { target: { value: '100' } });
-    fireEvent.change(screen.getByLabelText('Expense Paid Online'), { target: { value: '70' } });
+    fireEvent.change(screen.getByLabelText('Daily Salary'), { target: { value: '50' } });
+    fireEvent.change(screen.getByLabelText('Expense Paid Online'), { target: { value: '120' } });
     fireEvent.change(screen.getByLabelText('Expense Paid Cash'), { target: { value: '30' } });
     fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Opening entry' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add Daily Entry' }));
     await screen.findByText('Opening entry');
     assert.equal(calls.find(call => call.method === 'POST')?.body?.onlineSales, 1200);
+    assert.equal((calls.find(call => call.method === 'POST')?.body?.expenses as Record<string, number>).Salary, 50);
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     fireEvent.change(screen.getByLabelText('Online Sales'), { target: { value: '1400' } });
+    fireEvent.change(screen.getByLabelText('Daily Salary'), { target: { value: '75' } });
     fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Edited entry' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
     await screen.findByText('Edited entry');
     assert.equal(calls.find(call => call.method === 'PATCH')?.body?.onlineSales, 1400);
+    assert.equal((calls.find(call => call.method === 'PATCH')?.body?.expenses as Record<string, number>).Salary, 75);
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
     await screen.findByRole('alertdialog');

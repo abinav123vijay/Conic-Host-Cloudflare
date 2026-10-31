@@ -617,8 +617,8 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     ['Vendor credits received this month',vendorCreditsReceived]
   ];
   const expenseAnalyticsRows:Array<Array<string|number>>=[
-    ...expenseCategories.map(category=>[category,monthDaily.reduce((total,entry)=>total+Number(entry.expenses?.[category]||0),0)]),
-    ['Salary',monthlySalary],
+    ...expenseCategories.filter(category=>category!=='Salary').map(category=>[category,monthDaily.reduce((total,entry)=>total+Number(entry.expenses?.[category]||0),0)]),
+    ['Salary',monthlySalary+monthDaily.reduce((total,entry)=>total+Number(entry.expenses?.Salary||0),0)],
     ['Truck EMI',Number(monthFinance?.truckEmi||0)],
     ['Auto EMI',Number(monthFinance?.autoEmi||0)],
     ['Room rent',Number(monthFinance?.roomRent||0)],

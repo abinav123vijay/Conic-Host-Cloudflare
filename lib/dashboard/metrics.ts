@@ -54,8 +54,10 @@ export async function getMonthlyDashboard(year: number, month: number): Promise<
   const dailyExpenses = sum(monthDaily.map(expenseTotal));
   const period=`${year}-${String(month).padStart(2,'0')}`;
   const monthFinance=finance.find(item=>item.period===period);
-  const salaryTotal=sum((monthFinance?.salaries||[]).map(salary=>money(salary.amount)));
-  const monthlyExpenses={salary:salaryTotal,truckEmi:money(monthFinance?.truckEmi),autoEmi:money(monthFinance?.autoEmi),roomRent:money(monthFinance?.roomRent)};
+  const monthlySalaryTotal=sum((monthFinance?.salaries||[]).map(salary=>money(salary.amount)));
+  const dailySalaryTotal=sum(monthDaily.map(entry=>money((entry.expenses||{}).Salary)));
+  const salaryTotal=monthlySalaryTotal+dailySalaryTotal;
+  const monthlyExpenses={salary:monthlySalaryTotal,truckEmi:money(monthFinance?.truckEmi),autoEmi:money(monthFinance?.autoEmi),roomRent:money(monthFinance?.roomRent)};
   const loanRepayments=sum(loans.flatMap(loan=>(loan.repayments||[]).filter(repayment=>repayment.date>=start&&repayment.date<=end).map(repayment=>money(repayment.amount))));
   const totalExpenses=dailyExpenses+sum(Object.values(monthlyExpenses))+loanRepayments;
   const totalPurchases = sum(monthPurchases.map(purchaseTotal));
@@ -75,7 +77,7 @@ export async function getMonthlyDashboard(year: number, month: number): Promise<
     dailyOut.push({ day, label: String(day), sales, onlineSales: sum(same.map(d => money(d.onlineSales))), cashSales: sum(same.map(d => money(d.cashSales))), expenses: exp, balance: dailyBalances.total, onlineBalance: dailyBalances.online, cashBalance: dailyBalances.cash });
   }
   const expenseNames = [...new Set([...settings.expenseCategories,'Salary','Truck EMI','Auto EMI','Room Rent','Loan Repayment'])];
-  const financeExpenseAmounts:Record<string,number>={Salary:monthlyExpenses.salary,'Truck EMI':monthlyExpenses.truckEmi,'Auto EMI':monthlyExpenses.autoEmi,'Room Rent':monthlyExpenses.roomRent,'Loan Repayment':loanRepayments};
+  const financeExpenseAmounts:Record<string,number>={Salary:salaryTotal,'Truck EMI':monthlyExpenses.truckEmi,'Auto EMI':monthlyExpenses.autoEmi,'Room Rent':monthlyExpenses.roomRent,'Loan Repayment':loanRepayments};
   const expenseBreakdown = expenseNames.map(name => ({ name, amount: financeExpenseAmounts[name] ?? sum(monthDaily.map(d => money((d.expenses || {})[name]))) })).filter(x => x.amount > 0);
   const purchaseCategories = [...settings.vendors.filter(name => name !== 'Other' && name !== 'Transport'), 'Other', 'Transport'];
   const vendorPurchases = purchaseCategories.map(name => ({ name, amount: sum(monthPurchases.map(p => money((p.vendorAmounts || {})[name]))) })).filter(x => x.amount > 0);

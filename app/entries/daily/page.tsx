@@ -11,7 +11,7 @@ const newForm = (): DailyForm => ({
   date: new Date().toISOString().slice(0, 10),
   onlineSales: 0,
   cashSales: 0,
-  expenses: { Police: 0, Shop: 0, Transport: 0, Other: 0 },
+  expenses: { Police: 0, Shop: 0, Transport: 0, Other: 0, Salary: 0 },
   expensePaidOnline: 0,
   expensePaidCash: 0,
   notes: ''
@@ -96,16 +96,17 @@ export default function DailyPage() {
     }
   };
 
-  const categories = settings?.expenseCategories || ['Police', 'Shop', 'Transport', 'Other'];
+  const categories = (settings?.expenseCategories || ['Police', 'Shop', 'Transport', 'Other']).filter(category => category !== 'Salary');
 
   return <section className="content">
-    <div className="page-head"><div><h1>Daily Sales &amp; Expenses</h1><p>Enter one row per day. Total sales and expenses are derived automatically.</p></div></div>
+    <div className="page-head"><div><h1>Daily Sales &amp; Expenses</h1><p>Enter one row per day. Include daily salary here; include it in Expense Paid Online or Expense Paid Cash to deduct it from the matching balance.</p></div></div>
     <div className="card form-card">
       <div className="form-grid">
         <label>Date<input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></label>
         <label>Online Sales<input type="number" value={form.onlineSales} onChange={e => setForm({ ...form, onlineSales: Number(e.target.value) })} /></label>
         <label>Cash Sales<input type="number" value={form.cashSales} onChange={e => setForm({ ...form, cashSales: Number(e.target.value) })} /></label>
         {categories.map(category => <label key={category}>{category}<input type="number" value={form.expenses[category] || 0} onChange={e => setForm({ ...form, expenses: { ...form.expenses, [category]: Number(e.target.value) } })} /></label>)}
+        <label>Daily Salary<input type="number" min="0" step="0.01" value={form.expenses.Salary || 0} onChange={e => setForm({ ...form, expenses: { ...form.expenses, Salary: Number(e.target.value) } })} /></label>
         <label>Expense Paid Online<input type="number" value={form.expensePaidOnline} onChange={e => setForm({ ...form, expensePaidOnline: Number(e.target.value) })} /></label>
         <label>Expense Paid Cash<input type="number" value={form.expensePaidCash} onChange={e => setForm({ ...form, expensePaidCash: Number(e.target.value) })} /></label>
         <label className="wide">Notes<input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></label>

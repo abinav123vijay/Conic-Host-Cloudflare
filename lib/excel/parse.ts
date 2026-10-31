@@ -54,12 +54,17 @@ export function parseConicWorkbook(buffer: Buffer, businessId: string) {
   const dailyHeader = dailySheetRows[0] || [];
   const dailyRows = dailySheetRows.slice(1);
   const dailyColumn = (name:string,fallback:number) => { const index=dailyHeader.findIndex((value:unknown)=>String(value||'').trim()===name); return index>=0?index:fallback; };
+  const dailyExpenseCategories=[...new Set([
+    ...finalExpenses,
+    ...dailyHeader.slice(4,8),
+    ...dailyHeader.slice(16)
+  ].map(value=>String(value||'').trim()).filter(Boolean))];
   const dailyEntries: DailyEntry[] = [];
   for (const [index, row] of dailyRows.entries()) {
     const rowNumber = index + 2;
     const date = toISODate(row?.[dailyColumn('Date',0)], `Daily Sales & Expenses row ${rowNumber} date`); if (!date) continue;
     const expenses: Record<string, number> = {};
-    finalExpenses.forEach((name, i) => expenses[name] = toNumber(row?.[dailyColumn(name,4+i)], `${name} on Daily Sales & Expenses row ${rowNumber}`));
+    dailyExpenseCategories.forEach((name, i) => expenses[name] = toNumber(row?.[dailyColumn(name,4+i)], `${name} on Daily Sales & Expenses row ${rowNumber}`));
     const onlineSales=toNumber(row?.[dailyColumn('Online Sales',1)], `Online Sales on Daily Sales & Expenses row ${rowNumber}`),cashSales=toNumber(row?.[dailyColumn('Cash Sales',2)], `Cash Sales on Daily Sales & Expenses row ${rowNumber}`);
     const expensePaidOnline=toNumber(row?.[dailyColumn('Expense Paid Online',9)], `Expense Paid Online on Daily Sales & Expenses row ${rowNumber}`),expensePaidCash=toNumber(row?.[dailyColumn('Expense Paid Cash',10)], `Expense Paid Cash on Daily Sales & Expenses row ${rowNumber}`);
     const notes=String(row?.[dailyColumn('Notes',15)]||'');
