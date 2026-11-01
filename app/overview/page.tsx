@@ -24,10 +24,12 @@ export default function OverviewPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setMonthly(null);
+    setYearly(null);
     setError('');
     Promise.all([
-      fetch(`/api/dashboard/monthly?year=${year}&month=${month}`, { signal: controller.signal }),
-      fetch(`/api/dashboard/yearly?year=${year}`, { signal: controller.signal })
+      fetch(`/api/dashboard/monthly?year=${year}&month=${month}`, { signal: controller.signal, cache: 'no-store' }),
+      fetch(`/api/dashboard/yearly?year=${year}`, { signal: controller.signal, cache: 'no-store' })
     ]).then(async ([monthlyResponse, yearlyResponse]) => {
       if (!monthlyResponse.ok || !yearlyResponse.ok) throw new Error('Unable to load overview data.');
       const [monthlyData, yearlyData] = await Promise.all([monthlyResponse.json(), yearlyResponse.json()]);
@@ -101,7 +103,8 @@ export default function OverviewPage() {
         <dl className="finance-loan-summary-details">
           <div><dt>Salary</dt><dd>{currency(finance.salaries)}</dd></div>
           <div><dt>Truck EMI</dt><dd>{currency(finance.truckEmi)}</dd></div>
-          <div><dt>Auto EMI</dt><dd>{currency(finance.autoEmi)}</dd></div>
+          <div><dt>Auto EMI (business share)</dt><dd>{currency(finance.autoEmi)}</dd></div>
+          {finance.autoEmiFriendShare ? <div><dt>Auto EMI paid by friend</dt><dd>{currency(finance.autoEmiFriendShare)}</dd></div> : null}
           <div><dt>Room rent</dt><dd>{currency(finance.roomRent)}</dd></div>
           <div><dt>Savings deposited</dt><dd>{currency(finance.savingsDeposit)}</dd></div>
           <div><dt>Loan repayments</dt><dd>{currency(finance.loanRepayments)}</dd></div>

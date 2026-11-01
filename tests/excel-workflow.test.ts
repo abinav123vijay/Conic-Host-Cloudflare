@@ -222,6 +222,28 @@ test('export/import round trip retains daily entries, purchases, savings, loans 
   assert.equal(parsed.vendorDefectReturns[0].receipts[0].amount, 35);
 });
 
+test('Excel round trip preserves rent dates and auto EMI friend contributions', async () => {
+  const financeWithShares = monthlyFinance.map(item => item.period === '2026-10'
+    ? { ...item, autoEmi: 8597, autoEmiFriendShare: 4298, roomRentPaymentDate: '2026-10-09' }
+    : item);
+  const output = await buildWorkbookFromData(
+    fs.readFileSync(templatePath), daily, purchases, settings,
+    { months: financeWithShares, loans, vendorReturns }
+  );
+  const parsed = parseConicWorkbook(output, businessId);
+  const october = parsed.monthlyFinance.find(item => item.period === '2026-10');
+  const workbook = XLSX.read(output, { type: 'buffer' });
+  const analyticsRows = XLSX.utils.sheet_to_json<Array<string | number>>(workbook.Sheets.Analytics, { header: 1, raw: true });
+  assert.equal(october?.autoEmi, 8597);
+  assert.equal(october?.autoEmiFriendShare, 4298);
+  assert.equal(october?.roomRentPaymentDate, '2026-10-09');
+  assert.equal(analyticsRows.find(row => row[4] === 'Auto EMI business share')?.[5], 4299);
+  assert.equal(
+    calculateBalancesThrough('2026-10-10', [], [], { online: 50000, cash: 0 }, [october!]).online,
+    45356
+  );
+});
+
 test('daily salary expense survives Excel export and import without a configured expense category', async () => {
   const dailyWithSalary = daily.map((entry, index) => index === 1
     ? { ...entry, expenses: { ...entry.expenses, Salary: 75 } }

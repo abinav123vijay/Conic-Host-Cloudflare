@@ -177,6 +177,78 @@ test('daily salary is included in expenses and balance reflects entered payment 
   }
 });
 
+test('monthly dashboard charts include historical categories and reconcile with KPI totals', async () => {
+  const mongo = installInMemoryMongo();
+  mongo.documents('businesses').push({
+    _id: BUSINESS_ID,
+    openingOnlineBalance: 0,
+    openingCashBalance: 0,
+    vendors: ['Active Vendor'],
+    expenseCategories: ['Active Expense']
+  });
+  mongo.documents('dailyEntries').push({
+    businessId: BUSINESS_ID,
+    date: '2026-10-10',
+    onlineSales: 1000,
+    cashSales: 500,
+    expenses: { Salary: 800, 'Legacy Expense': 200, 'Active Expense': 100 },
+    expensePaidOnline: 900,
+    expensePaidCash: 200,
+    notes: ''
+  });
+  mongo.documents('purchaseEntries').push({
+    businessId: BUSINESS_ID,
+    purchaseDate: '2026-10-10',
+    paymentDate: '2026-10-10',
+    vendorAmounts: { 'Legacy Vendor': 1000, 'Active Vendor': 500 },
+    onlinePurchasePaid: 1000,
+    cashPurchasePaid: 200
+  });
+  mongo.documents('monthlyFinance').push({
+    businessId: BUSINESS_ID,
+    period: '2026-10',
+    year: 2026,
+    month: 10,
+    salaries: [{ person: 'Employee', amount: 15000, paidOnline: 14200, paidCash: 800 }],
+    truckEmi: 1000,
+    truckEmiPaymentDate: '2026-10-10',
+    autoEmi: 8597,
+    autoEmiFriendShare: 4298,
+    autoEmiPaymentDate: '2026-10-10',
+    roomRent: 200,
+    roomRentPaymentDate: '2026-10-10',
+    savingsDeposit: 0,
+    partnerPayments: []
+  });
+  mongo.documents('financeLoans').push({
+    businessId: BUSINESS_ID,
+    person: 'Lender',
+    source: 'friend',
+    amountTaken: 1000,
+    takenDate: '2026-10-01',
+    repayments: [{ date: '2026-10-10', amount: 50 }],
+    notes: ''
+  });
+
+  try {
+    const dashboard = await getMonthlyDashboard(2026, 10);
+    assert.equal(dashboard.totalSales, 1500);
+    assert.equal(dashboard.totalPurchases, 1500);
+    assert.equal(dashboard.totalExpenses, 21649);
+    assert.equal(dashboard.expenseBreakdown.find(item => item.name === 'Legacy Expense')?.amount, 200);
+    assert.equal(dashboard.expenseBreakdown.find(item => item.name === 'Salary')?.amount, 15800);
+    assert.equal(dashboard.expenseBreakdown.find(item => item.name === 'Auto EMI')?.amount, 4299);
+    assert.equal(dashboard.financeSummary?.autoEmiFriendShare, 4298);
+    assert.equal(dashboard.financeSummary?.autoEmiTotal, 8597);
+    assert.equal(dashboard.expenseBreakdown.reduce((total, item) => total + item.amount, 0), dashboard.totalExpenses);
+    assert.equal(dashboard.vendorPurchases.find(item => item.name === 'Legacy Vendor')?.amount, 1000);
+    assert.equal(dashboard.vendorPurchases.reduce((total, item) => total + item.amount, 0), dashboard.totalPurchases);
+    assert.equal(dashboard.purchaseStatus.paid + dashboard.purchaseStatus.pending, dashboard.totalPurchases);
+  } finally {
+    mongo.restore();
+  }
+});
+
 test('October demo flow balances sales, purchases, salary split, EMIs, savings, loan repayment, and refund', async () => {
   const mongo = installInMemoryMongo();
   mongo.documents('businesses').push({

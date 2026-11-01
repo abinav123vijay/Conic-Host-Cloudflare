@@ -23,7 +23,9 @@ export default function MonthlyPage(){
 
  useEffect(()=>{
   let active=true;
-  fetch(`/api/dashboard/monthly?year=${year}&month=${month}`)
+  setData(null);
+  setDashboardError('');
+  fetch(`/api/dashboard/monthly?year=${year}&month=${month}`,{cache:'no-store'})
    .then(async response=>{const result=await response.json();if(!response.ok)throw new Error(result.error||'Could not load the monthly dashboard.');return result as MonthlyDashboard;})
    .then(result=>{if(active){setData(result);setDashboardError('');}})
    .catch(error=>{if(active)setDashboardError(error instanceof Error?error.message:'Could not load the monthly dashboard.');});

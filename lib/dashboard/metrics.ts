@@ -57,7 +57,7 @@ export async function getMonthlyDashboard(year: number, month: number): Promise<
   const monthlySalaryTotal=sum((monthFinance?.salaries||[]).map(salary=>money(salary.amount)));
   const dailySalaryTotal=sum(monthDaily.map(entry=>money((entry.expenses||{}).Salary)));
   const salaryTotal=monthlySalaryTotal+dailySalaryTotal;
-  const monthlyExpenses={salary:monthlySalaryTotal,truckEmi:money(monthFinance?.truckEmi),autoEmi:money(monthFinance?.autoEmi),roomRent:money(monthFinance?.roomRent)};
+  const monthlyExpenses={salary:monthlySalaryTotal,truckEmi:money(monthFinance?.truckEmi),autoEmi:Math.max(0,money(monthFinance?.autoEmi)-money(monthFinance?.autoEmiFriendShare)),roomRent:money(monthFinance?.roomRent)};
   const loanRepayments=sum(loans.flatMap(loan=>(loan.repayments||[]).filter(repayment=>repayment.date>=start&&repayment.date<=end).map(repayment=>money(repayment.amount))));
   const totalExpenses=dailyExpenses+sum(Object.values(monthlyExpenses))+loanRepayments;
   const totalPurchases = sum(monthPurchases.map(purchaseTotal));
@@ -76,10 +76,14 @@ export async function getMonthlyDashboard(year: number, month: number): Promise<
     const dailyBalances = flowsThrough(date, daily, purchases, { online: settings.openingOnlineBalance, cash: settings.openingCashBalance }, finance, vendorReturns, loans);
     dailyOut.push({ day, label: String(day), sales, onlineSales: sum(same.map(d => money(d.onlineSales))), cashSales: sum(same.map(d => money(d.cashSales))), expenses: exp, balance: dailyBalances.total, onlineBalance: dailyBalances.online, cashBalance: dailyBalances.cash });
   }
-  const expenseNames = [...new Set([...settings.expenseCategories,'Salary','Truck EMI','Auto EMI','Room Rent','Loan Repayment'])];
+  const dailyExpenseNames = monthDaily.flatMap(entry => Object.keys(entry.expenses || {}));
+  const expenseNames = [...new Set([...settings.expenseCategories, ...dailyExpenseNames, 'Salary','Truck EMI','Auto EMI','Room Rent','Loan Repayment'])];
   const financeExpenseAmounts:Record<string,number>={Salary:salaryTotal,'Truck EMI':monthlyExpenses.truckEmi,'Auto EMI':monthlyExpenses.autoEmi,'Room Rent':monthlyExpenses.roomRent,'Loan Repayment':loanRepayments};
   const expenseBreakdown = expenseNames.map(name => ({ name, amount: financeExpenseAmounts[name] ?? sum(monthDaily.map(d => money((d.expenses || {})[name]))) })).filter(x => x.amount > 0);
-  const purchaseCategories = [...settings.vendors.filter(name => name !== 'Other' && name !== 'Transport'), 'Other', 'Transport'];
+  const recordedVendors = monthPurchases.flatMap(purchase => Object.keys(purchase.vendorAmounts || {}));
+  const purchaseCategories = [...new Set([...settings.vendors, ...recordedVendors])]
+    .filter(name => name !== 'Other' && name !== 'Transport')
+    .concat('Other', 'Transport');
   const vendorPurchases = purchaseCategories.map(name => ({ name, amount: sum(monthPurchases.map(p => money((p.vendorAmounts || {})[name]))) })).filter(x => x.amount > 0);
   const purchaseRelatedExpenses = {
     other: sum(monthPurchases.map(p => money((p.vendorAmounts || {}).Other))),
@@ -104,7 +108,7 @@ export async function getMonthlyDashboard(year: number, month: number): Promise<
     netAmount: onlineSales + cashSales - totalPurchases - totalExpenses,
     latestDay: latest ? { date: latest.date, sales: salesTotal(latest), expenses: expenseTotal(latest), net: salesTotal(latest) - expenseTotal(latest), balance: latestBalance } : { date: null, sales: 0, expenses: 0, net: 0, balance: closing.total },
     daily: dailyOut, expenseBreakdown, vendorPurchases, purchaseRelatedExpenses, purchaseStatus: { paid, pending }, opening,
-    financeSummary:{salaries:salaryTotal,truckEmi:monthlyExpenses.truckEmi,autoEmi:monthlyExpenses.autoEmi,roomRent:monthlyExpenses.roomRent,savingsDeposit:money(monthFinance?.savingsDeposit)+sum((monthFinance?.savingsEntries||[]).map(entry=>money(entry.amount))),partnerPayments,savingsBalance,loanRepayments,loanOutstanding,vendorCreditsPending,vendorCreditsReceived:vendorCreditsReceivedThisMonth}
+    financeSummary:{salaries:salaryTotal,truckEmi:monthlyExpenses.truckEmi,autoEmi:monthlyExpenses.autoEmi,autoEmiFriendShare:money(monthFinance?.autoEmiFriendShare),autoEmiTotal:money(monthFinance?.autoEmi),roomRent:monthlyExpenses.roomRent,savingsDeposit:money(monthFinance?.savingsDeposit)+sum((monthFinance?.savingsEntries||[]).map(entry=>money(entry.amount))),partnerPayments,savingsBalance,loanRepayments,loanOutstanding,vendorCreditsPending,vendorCreditsReceived:vendorCreditsReceivedThisMonth}
   };
 }
 

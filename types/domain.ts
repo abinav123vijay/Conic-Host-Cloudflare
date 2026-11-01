@@ -51,8 +51,10 @@ export type FinanceMonth = {
   truckEmi: number;
   truckEmiPaymentDate?: string;
   autoEmi: number;
+  autoEmiFriendShare?: number;
   autoEmiPaymentDate?: string;
   roomRent: number;
+  roomRentPaymentDate?: string;
   savingsDeposit: number;
   savingsEntries?: SavingsDeposit[];
   partnerPayments: PartnerSavingsPayment[];
@@ -133,6 +135,8 @@ export type MonthlyFinanceSummary = {
   salaries: number;
   truckEmi: number;
   autoEmi: number;
+  autoEmiFriendShare?: number;
+  autoEmiTotal?: number;
   roomRent: number;
   savingsDeposit: number;
   partnerPayments: number;

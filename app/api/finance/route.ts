@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
   const period = request.nextUrl.searchParams.get('period') || '';
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return NextResponse.json({ error: 'A valid month is required.' }, { status: 400 });
   const [year, month] = period.split('-').map(Number);
+  const periodStart = `${period}-01`;
   const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
   const db = await getDb();
   const [finance, financeHistory, loans, vendorReturns, business] = await Promise.all([
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     return {period:item.period,balance:savingsRunningBalance};
   });
   return NextResponse.json({
-    finance: finance || { businessId: BUSINESS_ID, period, year, month, salaries: [], truckEmi: 0, truckEmiPaymentDate: periodEnd, autoEmi: 0, autoEmiPaymentDate: periodEnd, roomRent: 0, savingsDeposit: 0, savingsEntries: [], partnerPayments: [] },
+    finance: finance || { businessId: BUSINESS_ID, period, year, month, salaries: [], truckEmi: 0, truckEmiPaymentDate: periodEnd, autoEmi: 0, autoEmiFriendShare: 0, autoEmiPaymentDate: periodEnd, roomRent: 0, roomRentPaymentDate: periodStart, savingsDeposit: 0, savingsEntries: [], partnerPayments: [] },
     isSaved: Boolean(finance),
     savingsBalance,
     savingsHistory,
@@ -57,7 +58,8 @@ export async function GET(request: NextRequest) {
         truckPaymentDate: item.truckEmiPaymentDate || historyMonthEnd,
         truckEmi: Number(item.truckEmi || 0),
         autoPaymentDate: item.autoEmiPaymentDate || historyMonthEnd,
-        autoEmi: Number(item.autoEmi || 0)
+        autoEmi: Number(item.autoEmi || 0),
+        autoEmiFriendShare: Number(item.autoEmiFriendShare || 0)
       };
     }),
     loans: loans.map(loan => ({ ...loan, repaid: sum((loan.repayments || []).map((entry: { amount: number }) => Number(entry.amount || 0))), outstanding: Math.max(0, Number(loan.amountTaken || 0) - sum((loan.repayments || []).map((entry: { amount: number }) => Number(entry.amount || 0)))) })),
@@ -91,15 +93,19 @@ export async function PUT(request: Request) {
   }) : [];
   const partnerPayments: PartnerSavingsPayment[] = Array.isArray(body.partnerPayments) ? body.partnerPayments.map(item => ({ partner: String(item.partner || '').trim(), amount: amount(item.amount), paymentDate: item.paymentDate || periodEnd })) : [];
   const savingsEntries: SavingsDeposit[] = Array.isArray(body.savingsEntries) ? body.savingsEntries.map(item => ({ date: String(item.date || ''), amount: amount(item.amount), note: String(item.note || '').trim() })) : current?.savingsEntries || [];
-  const truckEmi = amount(body.truckEmi), autoEmi = amount(body.autoEmi), roomRent = amount(body.roomRent), savingsDeposit = amount(body.savingsDeposit);
+  const truckEmi = amount(body.truckEmi), autoEmi = amount(body.autoEmi), autoEmiFriendShare = amount(body.autoEmiFriendShare ?? current?.autoEmiFriendShare ?? 0), roomRent = amount(body.roomRent), savingsDeposit = amount(body.savingsDeposit);
   const truckEmiPaymentDate = String(body.truckEmiPaymentDate || periodEnd);
   const autoEmiPaymentDate = String(body.autoEmiPaymentDate || periodEnd);
+  const roomRentPaymentDate = String(body.roomRentPaymentDate || current?.roomRentPaymentDate || periodStart);
   const isValidDate = (value: string) => validDate(value);
   const dateInPeriod = (value: string) => isValidDate(value) && value >= periodStart && value <= periodEnd;
-  if ([...salaries.flatMap(item => [item.amount, item.paidOnline, item.paidCash]), ...partnerPayments.map(item => item.amount), ...savingsEntries.map(item => item.amount), truckEmi, autoEmi, roomRent, savingsDeposit].some(value => !Number.isFinite(value)) || salaries.some(item => Math.abs(item.amount - Number(item.paidOnline) - Number(item.paidCash)) > 0.000001 || (item.amount > 0 && !item.person) || !dateInPeriod(item.paymentDate || '')) || partnerPayments.some(item => (item.amount > 0 && !item.partner) || !dateInPeriod(item.paymentDate || '')) || !validSavingsEntries(savingsEntries, periodStart, periodEnd) || !dateInPeriod(truckEmiPaymentDate) || !dateInPeriod(autoEmiPaymentDate)) {
+  if (Number.isFinite(autoEmiFriendShare) && Number.isFinite(autoEmi) && autoEmiFriendShare > autoEmi) {
+    return NextResponse.json({ error: "The friend's auto EMI share cannot be greater than the full auto EMI." }, { status: 400 });
+  }
+  if ([...salaries.flatMap(item => [item.amount, item.paidOnline, item.paidCash]), ...partnerPayments.map(item => item.amount), ...savingsEntries.map(item => item.amount), truckEmi, autoEmi, autoEmiFriendShare, roomRent, savingsDeposit].some(value => !Number.isFinite(value)) || salaries.some(item => Math.abs(item.amount - Number(item.paidOnline) - Number(item.paidCash)) > 0.000001 || (item.amount > 0 && !item.person) || !dateInPeriod(item.paymentDate || '')) || partnerPayments.some(item => (item.amount > 0 && !item.partner) || !dateInPeriod(item.paymentDate || '')) || !validSavingsEntries(savingsEntries, periodStart, periodEnd) || !dateInPeriod(truckEmiPaymentDate) || !dateInPeriod(autoEmiPaymentDate) || !dateInPeriod(roomRentPaymentDate)) {
     return NextResponse.json({ error: 'Enter valid names, payment dates, and non-negative amounts.' }, { status: 400 });
   }
-  const replacement: FinanceMonth = { businessId: BUSINESS_ID, period, year, month, salaries, truckEmi, truckEmiPaymentDate, autoEmi, autoEmiPaymentDate, roomRent, savingsDeposit, savingsEntries, partnerPayments };
+  const replacement: FinanceMonth = { businessId: BUSINESS_ID, period, year, month, salaries, truckEmi, truckEmiPaymentDate, autoEmi, autoEmiFriendShare, autoEmiPaymentDate, roomRent, roomRentPaymentDate, savingsDeposit, savingsEntries, partnerPayments };
   const savingsTimeline = [...existing.filter(item => item.period !== period), replacement].sort((left, right) => left.period.localeCompare(right.period));
   let savingsAfterUpdate = 0;
   for (const item of savingsTimeline) {
@@ -109,7 +115,7 @@ export async function PUT(request: Request) {
 
   await collection.updateOne(
     { businessId: BUSINESS_ID, period },
-    { $set: { businessId: BUSINESS_ID, period, year, month, salaries, truckEmi, truckEmiPaymentDate, autoEmi, autoEmiPaymentDate, roomRent, savingsDeposit, savingsEntries, partnerPayments, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
+    { $set: { businessId: BUSINESS_ID, period, year, month, salaries, truckEmi, truckEmiPaymentDate, autoEmi, autoEmiFriendShare, autoEmiPaymentDate, roomRent, roomRentPaymentDate, savingsDeposit, savingsEntries, partnerPayments, updatedAt: new Date() }, $setOnInsert: { createdAt: new Date() } },
     { upsert: true }
   );
   return NextResponse.json({ ok: true, savingsBalance: savingsAfterUpdate });
@@ -129,7 +135,7 @@ export async function PATCH(request: Request) {
   const collection = (await getDb()).collection<FinanceMonth>('monthlyFinance');
   const existing = await collection.find({ businessId: BUSINESS_ID }).toArray();
   const current = existing.find(item => item.period === period);
-  const replacement: FinanceMonth = current || { businessId: BUSINESS_ID, period, year, month, salaries: [], truckEmi: 0, truckEmiPaymentDate: periodEnd, autoEmi: 0, autoEmiPaymentDate: periodEnd, roomRent: 0, savingsDeposit: 0, partnerPayments: [] };
+  const replacement: FinanceMonth = current || { businessId: BUSINESS_ID, period, year, month, salaries: [], truckEmi: 0, truckEmiPaymentDate: periodEnd, autoEmi: 0, autoEmiFriendShare: 0, autoEmiPaymentDate: periodEnd, roomRent: 0, roomRentPaymentDate: periodStart, savingsDeposit: 0, partnerPayments: [] };
   replacement.savingsEntries = savingsEntries;
   const savingsTimeline = [...existing.filter(item => item.period !== period), replacement].sort((left, right) => left.period.localeCompare(right.period));
   let savingsBalance = 0;
@@ -142,7 +148,7 @@ export async function PATCH(request: Request) {
     { businessId: BUSINESS_ID, period },
     {
       $set: { savingsEntries, updatedAt: new Date() },
-      $setOnInsert: { businessId: BUSINESS_ID, period, year, month, salaries: [], truckEmi: 0, truckEmiPaymentDate: periodEnd, autoEmi: 0, autoEmiPaymentDate: periodEnd, roomRent: 0, savingsDeposit: 0, partnerPayments: [], createdAt: new Date() }
+      $setOnInsert: { businessId: BUSINESS_ID, period, year, month, salaries: [], truckEmi: 0, truckEmiPaymentDate: periodEnd, autoEmi: 0, autoEmiFriendShare: 0, autoEmiPaymentDate: periodEnd, roomRent: 0, roomRentPaymentDate: periodStart, savingsDeposit: 0, partnerPayments: [], createdAt: new Date() }
     },
     { upsert: true }
   );

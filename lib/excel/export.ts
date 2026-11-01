@@ -146,7 +146,8 @@ function buildFinanceSheet(finance:AdditionalFinanceData){
     for(const [type,amount,paymentDate] of [
       ['Truck EMI',month.truckEmi,month.truckEmiPaymentDate||periodEnd],
       ['Auto EMI',month.autoEmi,month.autoEmiPaymentDate||periodEnd],
-      ['Room Rent',month.roomRent,periodEnd],
+      ['Auto EMI Friend Share',month.autoEmiFriendShare||0,month.autoEmiPaymentDate||periodEnd],
+      ['Room Rent',month.roomRent,month.roomRentPaymentDate||`${period}-01`],
       ['Savings Deposit',month.savingsDeposit,periodEnd]
     ] as const) records.push({type,dateOrPeriod:period,paymentDate,name:'',source:'',amount:Number(amount||0),received:0,outstanding:0,notes:'',recordId:''});
     for(const entry of month.savingsEntries||[]) records.push({type:'Dated Savings Deposit',dateOrPeriod:excelSerial(entry.date)||0,paymentDate:entry.date,name:'',source:'Savings',amount:Number(entry.amount||0),received:0,outstanding:0,notes:entry.note||'',recordId:''});
@@ -340,7 +341,7 @@ function buildDailyXml(entries: DailyEntry[], expenseCategories: string[], purch
     const expenseFormula=`IF($A${r}="","",SUM(${expenseFormulaRanges.join(',')}))`;
     const totalSalesFormula=`IF($A${r}="","",SUM(B${r}:C${r}))`;
     const financeCriteria=`"<="&$A${r}`;
-    const financeOutflowFormula=['Salary','Truck EMI','Auto EMI','Room Rent','Savings Deposit','Dated Savings Deposit'].map(type=>financeSum(type,'J',financeCriteria)).join('+')||'0';
+    const financeOutflowFormula=`(${['Salary','Truck EMI','Auto EMI','Room Rent','Savings Deposit','Dated Savings Deposit'].map(type=>financeSum(type,'J',financeCriteria)).join('+')||'0'}-${financeSum('Auto EMI Friend Share','J',financeCriteria)})`;
     const loanRepaymentsFormula=financeSum('Loan Repayment','B',financeCriteria);
     const refundReceiptsFormula=financeSum('Vendor Refund Received','B',financeCriteria);
     const onlineBalanceFormula=`IF($A${r}="","",Settings!$B$3+SUMIFS($B$2:$B$${dailyLimit},$A$2:$A$${dailyLimit},"<="&$A${r})-SUMIFS($J$2:$J$${dailyLimit},$A$2:$A$${dailyLimit},"<="&$A${r})-(${onlinePurchaseOutflow(r)})-(${financeOutflowFormula})-(${loanRepaymentsFormula}))`;
@@ -416,7 +417,8 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
   const monthPurchases=purchases.filter(entry=>entry.purchaseDate>=periodStart&&entry.purchaseDate<periodEnd);
   const monthFinance=(finance.months||[]).find(entry=>entry.period===`${monthlySelectedYear}-${String(selectedMonth).padStart(2,'0')}`);
   const monthlySalary=(monthFinance?.salaries||[]).reduce((sum,salary)=>sum+Number(salary.amount||0),0);
-  const monthlyOperationsExpenses=monthlySalary+Number(monthFinance?.truckEmi||0)+Number(monthFinance?.autoEmi||0)+Number(monthFinance?.roomRent||0);
+  const autoEmiBusinessShare=Math.max(0,Number(monthFinance?.autoEmi||0)-Number(monthFinance?.autoEmiFriendShare||0));
+  const monthlyOperationsExpenses=monthlySalary+Number(monthFinance?.truckEmi||0)+autoEmiBusinessShare+Number(monthFinance?.roomRent||0);
   const monthlyLoanRepayments=(finance.loans||[]).flatMap(loan=>loan.repayments||[]).filter(repayment=>repayment.date>=periodStart&&repayment.date<periodEnd).reduce((sum,repayment)=>sum+Number(repayment.amount||0),0);
   const totalSales=monthDaily.reduce((total,entry)=>total+Number(entry.onlineSales||0)+Number(entry.cashSales||0),0);
   const dailyExpenses=monthDaily.reduce((total,entry)=>total+Object.values(entry.expenses||{}).reduce((amount,value)=>amount+Number(value||0),0),0);
@@ -463,14 +465,14 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
   const financePaymentDateRange=`'Additional Finance'!$J$4:$J$${financeSheetLastRow}`;
   const financeSum=(type:string,periodCriteria:string)=>`SUMIFS(${financeRange},${financeTypeRange},"${type}",${financePeriodRange},${periodCriteria})`;
   const financeDatedSum=(type:string,dateCriteria:string)=>`SUMIFS(${financeRange},${financeTypeRange},"${type}",${financePaymentDateRange},${dateCriteria})`;
-  const financeOutflowThrough=(dateCriteria:string)=>['Salary','Truck EMI','Auto EMI','Room Rent','Savings Deposit','Dated Savings Deposit'].map(type=>financeDatedSum(type,dateCriteria)).join('+')||'0';
+  const financeOutflowThrough=(dateCriteria:string)=>`(${['Salary','Truck EMI','Auto EMI','Room Rent','Savings Deposit','Dated Savings Deposit'].map(type=>financeDatedSum(type,dateCriteria)).join('+')||'0'}-${financeDatedSum('Auto EMI Friend Share',dateCriteria)})`;
   const loanRepaymentsThrough=(dateCriteria:string)=>`SUMIFS(${financeRange},${financeTypeRange},"Loan Repayment",${financePeriodRange},${dateCriteria})`;
   const vendorRefundsThrough=(dateCriteria:string)=>`SUMIFS(${financeRange},${financeTypeRange},"Vendor Refund Received",${financePeriodRange},${dateCriteria})`;
   const onlinePurchasePaymentsThrough=(dateCriteria:string)=>`SUMIFS('Weekly Purchases'!$N$2:$N$${purchaseLimit},'Weekly Purchases'!$B$2:$B$${purchaseLimit},"<>",'Weekly Purchases'!$B$2:$B$${purchaseLimit},${dateCriteria})+SUMIFS('Weekly Purchases'!$N$2:$N$${purchaseLimit},'Weekly Purchases'!$B$2:$B$${purchaseLimit},"",'Weekly Purchases'!$A$2:$A$${purchaseLimit},${dateCriteria})`;
   const cashPurchasePaymentsThrough=(dateCriteria:string)=>`SUMIFS('Weekly Purchases'!$O$2:$O$${purchaseLimit},'Weekly Purchases'!$B$2:$B$${purchaseLimit},"<>",'Weekly Purchases'!$B$2:$B$${purchaseLimit},${dateCriteria})+SUMIFS('Weekly Purchases'!$O$2:$O$${purchaseLimit},'Weekly Purchases'!$B$2:$B$${purchaseLimit},"",'Weekly Purchases'!$A$2:$A$${purchaseLimit},${dateCriteria})`;
   const onlineBalanceThrough=(dateCriteria:string)=>`Settings!$B$3+SUMIFS('Daily Sales & Expenses'!$B$2:$B$${dailyLimit},'Daily Sales & Expenses'!$A$2:$A$${dailyLimit},${dateCriteria})-SUMIFS('Daily Sales & Expenses'!$J$2:$J$${dailyLimit},'Daily Sales & Expenses'!$A$2:$A$${dailyLimit},${dateCriteria})-(${onlinePurchasePaymentsThrough(dateCriteria)})-(${financeOutflowThrough(dateCriteria)})-(${loanRepaymentsThrough(dateCriteria)})`;
   const cashBalanceThrough=(dateCriteria:string)=>`Settings!$B$4+SUMIFS('Daily Sales & Expenses'!$C$2:$C$${dailyLimit},'Daily Sales & Expenses'!$A$2:$A$${dailyLimit},${dateCriteria})-SUMIFS('Daily Sales & Expenses'!$K$2:$K$${dailyLimit},'Daily Sales & Expenses'!$A$2:$A$${dailyLimit},${dateCriteria})-(${cashPurchasePaymentsThrough(dateCriteria)})`;
-  const monthlyFinanceExpensesFormula=['Salary','Truck EMI','Auto EMI','Room Rent'].map(type=>financeSum(type,'TEXT($B$3,"yyyy-mm")')).join('+')||'0';
+  const monthlyFinanceExpensesFormula=`(${['Salary','Truck EMI','Auto EMI','Room Rent'].map(type=>financeSum(type,'TEXT($B$3,"yyyy-mm")')).join('+')||'0'}-${financeSum('Auto EMI Friend Share','TEXT($B$3,"yyyy-mm")')})`;
   const monthlyLoanRepaymentsFormula=`SUMIFS(${financeRange},${financeTypeRange},"Loan Repayment",${financePeriodRange},">="&$B$3,${financePeriodRange},"<"&EDATE($B$3,1))`;
   const settingsPath='xl/worksheets/sheet6.xml';
   let sxml=await zip.file(settingsPath)!.async('string');
@@ -509,7 +511,7 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     }
   }
   if(monthFinance){
-    const financeRows=[['Monthly salary',monthlySalary],['Truck EMI',Number(monthFinance.truckEmi||0)],['Auto EMI',Number(monthFinance.autoEmi||0)],['Room rent',Number(monthFinance.roomRent||0)],['Loan repayments',monthlyLoanRepayments]] as const;
+    const financeRows=[['Monthly salary',monthlySalary],['Truck EMI',Number(monthFinance.truckEmi||0)],['Auto EMI (business share)',Math.max(0,Number(monthFinance.autoEmi||0)-Number(monthFinance.autoEmiFriendShare||0))],['Room rent',Number(monthFinance.roomRent||0)],['Loan repayments',monthlyLoanRepayments]] as const;
     summaryXml=setWorksheetCell(summaryXml,`A${additionalRow}`,cellText(`A${additionalRow}`,'Monthly Finance','5'));
     additionalRow++;
     for(const [label,value] of financeRows){summaryXml=setWorksheetCell(summaryXml,`A${additionalRow}`,cellText(`A${additionalRow}`,label,'12'));summaryXml=setWorksheetCell(summaryXml,`B${additionalRow}`,cellNum(`B${additionalRow}`,value,'12'));additionalRow++;}
@@ -566,7 +568,7 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     const sales=monthDaily.reduce((total,entry)=>total+Number(entry.onlineSales||0)+Number(entry.cashSales||0),0);
     const monthlyRecord=(finance.months||[]).find(entry=>entry.period===`${selectedYearlyYear}-${String(month).padStart(2,'0')}`);
     const loanRepayments=(finance.loans||[]).flatMap(loan=>loan.repayments||[]).filter(repayment=>repayment.date>=start&&repayment.date<end).reduce((total,repayment)=>total+Number(repayment.amount||0),0);
-    const expenses=monthDaily.reduce((total,entry)=>total+Object.values(entry.expenses||{}).reduce((amount,value)=>amount+Number(value||0),0),0)+(monthlyRecord?.salaries||[]).reduce((total,salary)=>total+Number(salary.amount||0),0)+Number(monthlyRecord?.truckEmi||0)+Number(monthlyRecord?.autoEmi||0)+Number(monthlyRecord?.roomRent||0)+loanRepayments;
+    const expenses=monthDaily.reduce((total,entry)=>total+Object.values(entry.expenses||{}).reduce((amount,value)=>amount+Number(value||0),0),0)+(monthlyRecord?.salaries||[]).reduce((total,salary)=>total+Number(salary.amount||0),0)+Number(monthlyRecord?.truckEmi||0)+Math.max(0,Number(monthlyRecord?.autoEmi||0)-Number(monthlyRecord?.autoEmiFriendShare||0))+Number(monthlyRecord?.roomRent||0)+loanRepayments;
     const purchasesTotal=monthPurchases.reduce((total,entry)=>total+Object.values(entry.vendorAmounts||{}).reduce((amount,value)=>amount+Number(value||0),0),0);
     annualSales+=sales;annualPurchases+=purchasesTotal;annualExpenses+=expenses;annualNet+=sales-purchasesTotal-expenses;
     const balances=balanceThrough(new Date(Date.UTC(selectedYearlyYear,month,0)).toISOString().slice(0,10),daily,purchases,{online:settings.openingOnlineBalance,cash:settings.openingCashBalance},finance.months,finance.vendorReturns,finance.loans);
@@ -575,7 +577,7 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     for(const [column,value] of [['B',sales],['C',purchasesTotal],['D',expenses],['E',sales-purchasesTotal-expenses],['F',balances.total]] as const) yearlyXml=setFormulaCache(yearlyXml,`${column}${row}`,value);
     for(const [column,value] of [['N',sales],['O',purchasesTotal],['P',expenses],['Q',sales-purchasesTotal-expenses],['R',balances.total]] as const) setCalcValue(`${column}${month+1}`,value);
     const yearPeriodCriteria=`TEXT(DATE($B$3,${month},1),"yyyy-mm")`;
-    const yearlyOperationsExpenses=['Salary','Truck EMI','Auto EMI','Room Rent'].map(type=>`SUMIFS(${financeRange},${financeTypeRange},"${type}",${financePeriodRange},${yearPeriodCriteria})`).join('+')||'0';
+    const yearlyOperationsExpenses=`(${['Salary','Truck EMI','Auto EMI','Room Rent'].map(type=>`SUMIFS(${financeRange},${financeTypeRange},"${type}",${financePeriodRange},${yearPeriodCriteria})`).join('+')||'0'}-SUMIFS(${financeRange},${financeTypeRange},"Auto EMI Friend Share",${financePeriodRange},${yearPeriodCriteria}))`;
     const yearlyLoanRepayments=`SUMIFS(${financeRange},${financeTypeRange},"Loan Repayment",${financePeriodRange},">="&DATE($B$3,${month},1),${financePeriodRange},"<"&EDATE(DATE($B$3,${month},1),1))`;
     const dailyExpenseFormula=`SUMIFS('Daily Sales & Expenses'!$I$2:$I$${dailyLimit},'Daily Sales & Expenses'!$A$2:$A$${dailyLimit},">="&DATE($B$3,${month},1),'Daily Sales & Expenses'!$A$2:$A$${dailyLimit},"<"&EDATE(DATE($B$3,${month},1),1))`;
     yearlyXml=setFormulaCell(yearlyXml,`D${row}`,`${dailyExpenseFormula}+${yearlyOperationsExpenses}+${yearlyLoanRepayments}`,expenses);
@@ -602,7 +604,9 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     ['Daily expenses',dailyExpenses],
     ['Salaries',monthlySalary],
     ['Truck EMI',Number(monthFinance?.truckEmi||0)],
-    ['Auto EMI',Number(monthFinance?.autoEmi||0)],
+    ['Auto EMI (full)',Number(monthFinance?.autoEmi||0)],
+    ['Auto EMI paid by friend',Number(monthFinance?.autoEmiFriendShare||0)],
+    ['Auto EMI business share',autoEmiBusinessShare],
     ['Room rent',Number(monthFinance?.roomRent||0)],
     ['Loan repayments',monthlyLoanRepayments],
     ['Total expenses',totalExpenses],
@@ -620,7 +624,7 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     ...expenseCategories.filter(category=>category!=='Salary').map(category=>[category,monthDaily.reduce((total,entry)=>total+Number(entry.expenses?.[category]||0),0)]),
     ['Salary',monthlySalary+monthDaily.reduce((total,entry)=>total+Number(entry.expenses?.Salary||0),0)],
     ['Truck EMI',Number(monthFinance?.truckEmi||0)],
-    ['Auto EMI',Number(monthFinance?.autoEmi||0)],
+    ['Auto EMI',autoEmiBusinessShare],
     ['Room rent',Number(monthFinance?.roomRent||0)],
     ['Loan repayment',monthlyLoanRepayments]
   ];
@@ -653,7 +657,7 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     const sales=periodDaily.reduce((sum,entry)=>sum+Number(entry.onlineSales||0)+Number(entry.cashSales||0),0);
     const purchaseTotal=periodPurchases.reduce((sum,entry)=>sum+Object.values(entry.vendorAmounts||{}).reduce((amount,value)=>amount+Number(value||0),0),0);
     const operations=(periodFinance?.salaries||[]).reduce((sum,item)=>sum+Number(item.amount||0),0)
-      +Number(periodFinance?.truckEmi||0)+Number(periodFinance?.autoEmi||0)+Number(periodFinance?.roomRent||0);
+      +Number(periodFinance?.truckEmi||0)+Math.max(0,Number(periodFinance?.autoEmi||0)-Number(periodFinance?.autoEmiFriendShare||0))+Number(periodFinance?.roomRent||0);
     const loanPayments=(finance.loans||[]).flatMap(loan=>loan.repayments||[])
       .filter(item=>item.date>=start&&item.date<end).reduce((sum,item)=>sum+Number(item.amount||0),0);
     const expenses=periodDaily.reduce((sum,entry)=>sum+Object.values(entry.expenses||{}).reduce((amount,value)=>amount+Number(value||0),0),0)+operations+loanPayments;
@@ -691,8 +695,8 @@ export async function buildWorkbookFromData(template:Buffer,daily:DailyEntry[],p
     return sum
       +(item.salaries||[]).filter(salary=>(salary.paymentDate||financeMonthEnd)>=periodStart&&(salary.paymentDate||financeMonthEnd)<periodEnd).reduce((amount,salary)=>amount+Number(salary.amount||0),0)
       +((item.truckEmiPaymentDate||financeMonthEnd)>=periodStart&&(item.truckEmiPaymentDate||financeMonthEnd)<periodEnd?Number(item.truckEmi||0):0)
-      +((item.autoEmiPaymentDate||financeMonthEnd)>=periodStart&&(item.autoEmiPaymentDate||financeMonthEnd)<periodEnd?Number(item.autoEmi||0):0)
-      +(financeMonthEnd>=periodStart&&financeMonthEnd<periodEnd?Number(item.roomRent||0):0);
+      +((item.autoEmiPaymentDate||financeMonthEnd)>=periodStart&&(item.autoEmiPaymentDate||financeMonthEnd)<periodEnd?Math.max(0,Number(item.autoEmi||0)-Number(item.autoEmiFriendShare||0)):0)
+      +((item.roomRentPaymentDate||`${item.period}-01`)>=periodStart&&(item.roomRentPaymentDate||`${item.period}-01`)<periodEnd?Number(item.roomRent||0):0);
   },0);
   const financeRepaymentPayments=(finance.loans||[]).flatMap(loan=>loan.repayments||[])
     .filter(item=>item.date>=periodStart&&item.date<periodEnd).reduce((sum,item)=>sum+Number(item.amount||0),0);

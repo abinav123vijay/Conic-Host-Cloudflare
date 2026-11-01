@@ -10,13 +10,14 @@ import { MonthYear } from '@/components/Controls';
 import type { FinanceLoan, FinanceMonth, LoanRepayment, PartnerSavingsPayment, SalaryPayment, SavingsDeposit, VendorDefectReturn, VendorRefundReceipt } from '@/types/domain';
 
 const today = () => new Date().toISOString().slice(0, 10);
+const monthStartDate = (year: number, month: number) => `${year}-${String(month).padStart(2, '0')}-01`;
 const monthEndDate = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 const money = (value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value || 0);
 const total = (values: number[]) => values.reduce((sum, value) => sum + Number(value || 0), 0);
 
 type FinanceLoanRow = FinanceLoan & { repaid: number; outstanding: number };
 type VendorReturnRow = VendorDefectReturn & { received: number; pending: number };
-type EmiHistoryRow = { period: string; truckPaymentDate: string; truckEmi: number; autoPaymentDate: string; autoEmi: number };
+type EmiHistoryRow = { period: string; truckPaymentDate: string; truckEmi: number; autoPaymentDate: string; autoEmi: number; autoEmiFriendShare: number };
 type FinanceResponse = { finance: FinanceMonth; isSaved: boolean; savingsBalance: number; savingsHistory: { period: string; balance: number }[]; emiTotals: { truck: number; auto: number }; emiTotalsSaved: boolean; emiPaid: { truck: number; auto: number }; emiHistory: EmiHistoryRow[]; loans: FinanceLoanRow[]; vendorReturns: VendorReturnRow[] };
 type ReturnDraft = { date: string; amount: number };
 type LoanEditDraft = Pick<FinanceLoan, 'person' | 'source' | 'amountTaken' | 'takenDate' | 'notes'> & { repayments: LoanRepayment[] };
@@ -45,11 +46,13 @@ export default function FinancePage() {
   const [truckEmiPaid, setTruckEmiPaid] = useState(0);
   const [editingEmiTotals, setEditingEmiTotals] = useState(false);
   const [autoEmi, setAutoEmi] = useState(0);
+  const [autoEmiFriendShare, setAutoEmiFriendShare] = useState(0);
   const [autoEmiPaymentDate, setAutoEmiPaymentDate] = useState(monthEndDate(current.getFullYear(), current.getMonth() + 1));
   const [autoEmiTotal, setAutoEmiTotal] = useState(0);
   const [autoEmiPaid, setAutoEmiPaid] = useState(0);
   const [emiHistory, setEmiHistory] = useState<EmiHistoryRow[]>([]);
   const [roomRent, setRoomRent] = useState(0);
+  const [roomRentPaymentDate, setRoomRentPaymentDate] = useState(monthStartDate(current.getFullYear(), current.getMonth() + 1));
   const [savingsDeposit, setSavingsDeposit] = useState(0);
   const [saving, setSaving] = useState(false);
   const [savingEmiTotals, setSavingEmiTotals] = useState(false);
@@ -78,6 +81,7 @@ export default function FinancePage() {
     setEditingMonth(!data.isSaved);
     setEditingPartnerPayments(!data.isSaved);
     setEditingSavings(!data.isSaved);
+    const periodStart = monthStartDate(year, month);
     const periodEnd = monthEndDate(year, month);
     setSalaries((data.finance.salaries || []).map(salary => ({
       ...salary,
@@ -93,11 +97,13 @@ export default function FinancePage() {
     setTruckEmiPaid(data.emiPaid.truck || 0);
     setEditingEmiTotals(!data.emiTotalsSaved);
     setAutoEmi(data.finance.autoEmi || 0);
+    setAutoEmiFriendShare(data.finance.autoEmiFriendShare || 0);
     setAutoEmiPaymentDate(data.finance.autoEmiPaymentDate || periodEnd);
     setAutoEmiTotal(data.emiTotals.auto || 0);
     setAutoEmiPaid(data.emiPaid.auto || 0);
     setEmiHistory(data.emiHistory || []);
     setRoomRent(data.finance.roomRent || 0);
+    setRoomRentPaymentDate(data.finance.roomRentPaymentDate || periodStart);
     setSavingsDeposit(data.finance.savingsDeposit || 0);
     setSavingsBalance(data.savingsBalance || 0);
     setSavingsHistory(data.savingsHistory || []);
@@ -130,7 +136,7 @@ export default function FinancePage() {
       const response = await fetch('/api/finance', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ period: `${year}-${String(month).padStart(2, '0')}`, salaries: salaries.filter(item => item.person.trim() || item.amount > 0), truckEmi, truckEmiPaymentDate, autoEmi, autoEmiPaymentDate, roomRent, savingsDeposit, savingsEntries, partnerPayments: partnerPayments.filter(item => item.partner.trim() || item.amount > 0) })
+        body: JSON.stringify({ period: `${year}-${String(month).padStart(2, '0')}`, salaries: salaries.filter(item => item.person.trim() || item.amount > 0), truckEmi, truckEmiPaymentDate, autoEmi, autoEmiFriendShare, autoEmiPaymentDate, roomRent, roomRentPaymentDate, savingsDeposit, savingsEntries, partnerPayments: partnerPayments.filter(item => item.partner.trim() || item.amount > 0) })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not save monthly finance.');
@@ -275,7 +281,7 @@ export default function FinancePage() {
           ? '/api/finance'
           : `/api/finance/${deleteTarget.kind === 'loan' ? 'loans' : 'vendor-returns'}/${deleteTarget.id}`;
       const response = deleteTarget.kind === 'partner-payouts'
-        ? await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ period: `${year}-${String(month).padStart(2, '0')}`, salaries, truckEmi, truckEmiPaymentDate, autoEmi, autoEmiPaymentDate, roomRent, savingsDeposit, partnerPayments: [] }) })
+        ? await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ period: `${year}-${String(month).padStart(2, '0')}`, salaries, truckEmi, truckEmiPaymentDate, autoEmi, autoEmiFriendShare, autoEmiPaymentDate, roomRent, roomRentPaymentDate, savingsDeposit, partnerPayments: [] }) })
         : await fetch(url, { method: 'DELETE' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `Could not delete ${deleteTarget.label.toLowerCase()}.`);
@@ -293,7 +299,8 @@ export default function FinancePage() {
   const savingsEntriesTotal = total(savingsEntries.map(entry => entry.amount));
   const savingsDepositedThisMonth = savingsDeposit + savingsEntriesTotal;
   const loanRepaymentsThisMonth=total(loans.flatMap(loan=>(loan.repayments||[]).filter(repayment=>repayment.date>=periodStart&&repayment.date<=periodEnd).map(repayment=>repayment.amount)));
-  const monthlyOutflow = total([...salaries.map(item => item.amount), truckEmi, autoEmi, roomRent, savingsDepositedThisMonth, loanRepaymentsThisMonth]);
+  const autoEmiBusinessShare = Math.max(0, autoEmi - autoEmiFriendShare);
+  const monthlyOutflow = total([...salaries.map(item => item.amount), truckEmi, autoEmiBusinessShare, roomRent, savingsDepositedThisMonth, loanRepaymentsThisMonth]);
   const monthlyPaymentsTotal = monthlyOutflow - savingsDepositedThisMonth;
   const salaryTotal = total(salaries.map(item => item.amount));
   const partnerPaymentsTotal = total(partnerPayments.map(item => item.amount));
@@ -305,14 +312,14 @@ export default function FinancePage() {
   const monthlyPaymentRows = [
     ...salaries.filter(item => item.amount > 0).map(item => ({ date: item.paymentDate || periodEnd, type: 'Salary', recipient: item.person || 'Salary', online: item.paidOnline ?? item.amount, cash: item.paidCash ?? 0, amount: item.amount })),
     { date: truckEmiPaymentDate, type: 'Truck EMI', recipient: 'Truck finance', online: truckEmi, cash: 0, amount: truckEmi },
-    { date: autoEmiPaymentDate, type: 'Auto EMI', recipient: 'Auto finance', online: autoEmi, cash: 0, amount: autoEmi },
-    { date: periodEnd, type: 'Room rent', recipient: 'Room rent', online: roomRent, cash: 0, amount: roomRent },
+    { date: autoEmiPaymentDate, type: 'Auto EMI', recipient: 'Auto finance (business share)', online: autoEmiBusinessShare, cash: 0, amount: autoEmiBusinessShare },
+    { date: roomRentPaymentDate, type: 'Room rent', recipient: 'Room rent', online: roomRent, cash: 0, amount: roomRent },
     ...loans.flatMap(loan => (loan.repayments || []).filter(repayment => repayment.date >= periodStart && repayment.date <= periodEnd).map(repayment => ({ date: repayment.date, type: 'Loan repayment', recipient: loan.person, online: repayment.amount, cash: 0, amount: repayment.amount })))
   ].filter(item => item.amount > 0);
   const monthlyOutflowMix=[
     {label:'Salary',value:total(salaries.map(item=>item.amount))},
     {label:'Truck EMI',value:truckEmi},
-    {label:'Auto EMI',value:autoEmi},
+    {label:'Auto EMI',value:autoEmiBusinessShare},
     {label:'Room rent',value:roomRent},
     {label:'Savings deposited',value:savingsDepositedThisMonth},
     {label:'Loan repayments',value:loanRepaymentsThisMonth}
@@ -330,7 +337,7 @@ export default function FinancePage() {
       <KPI title="Monthly outflow" value={money(monthlyOutflow)} sub="Salary, EMI, rent, savings and repayments" />
       <KPI title="Salary total" value={money(salaryTotal)} />
       <KPI title="Truck EMI" value={money(truckEmi)} />
-      <KPI title="Auto EMI" value={money(autoEmi)} />
+      <KPI title="Auto EMI (full)" value={money(autoEmi)} sub={`Friend pays ${money(autoEmiFriendShare)} · Business pays ${money(autoEmiBusinessShare)}`} />
       <KPI title="Truck EMI pending" value={money(truckEmiPending)} />
       <KPI title="Auto EMI pending" value={money(autoEmiPending)} />
       <KPI title="Room rent" value={money(roomRent)} />
@@ -354,22 +361,25 @@ export default function FinancePage() {
         <div className="emi-total-stat pending"><span>Auto EMI pending</span><strong>{money(autoEmiPending)}</strong></div>
       </div>
       <div className="finance-payment-heading"><h3>EMI payment history</h3><span>{money(truckEmiPaid + autoEmiPaid)} paid</span></div>
-      <div className="table-wrap finance-table-wrap"><table><thead><tr><th>Month</th><th>Truck payment date</th><th>Truck paid</th><th>Auto payment date</th><th>Auto paid</th><th>Total paid</th></tr></thead><tbody>
-        {emiHistory.map(entry => <tr key={entry.period}><td>{entry.period}</td><td>{entry.truckEmi > 0 ? entry.truckPaymentDate : '—'}</td><td>{entry.truckEmi > 0 ? money(entry.truckEmi) : '—'}</td><td>{entry.autoEmi > 0 ? entry.autoPaymentDate : '—'}</td><td>{entry.autoEmi > 0 ? money(entry.autoEmi) : '—'}</td><td>{money(entry.truckEmi + entry.autoEmi)}</td></tr>)}
-        {emiHistory.length === 0 && <tr><td colSpan={6} className="finance-empty">No EMI payments recorded.</td></tr>}
+      <div className="table-wrap finance-table-wrap"><table><thead><tr><th>Month</th><th>Truck payment date</th><th>Truck paid</th><th>Auto payment date</th><th>Full auto EMI</th><th>Friend's share</th><th>Business share</th><th>Total EMI</th></tr></thead><tbody>
+        {emiHistory.map(entry => <tr key={entry.period}><td>{entry.period}</td><td>{entry.truckEmi > 0 ? entry.truckPaymentDate : '—'}</td><td>{entry.truckEmi > 0 ? money(entry.truckEmi) : '—'}</td><td>{entry.autoEmi > 0 ? entry.autoPaymentDate : '—'}</td><td>{entry.autoEmi > 0 ? money(entry.autoEmi) : '—'}</td><td>{entry.autoEmiFriendShare > 0 ? money(entry.autoEmiFriendShare) : '—'}</td><td>{entry.autoEmi > 0 ? money(Math.max(0, entry.autoEmi - entry.autoEmiFriendShare)) : '—'}</td><td>{money(entry.truckEmi + entry.autoEmi)}</td></tr>)}
+        {emiHistory.length === 0 && <tr><td colSpan={8} className="finance-empty">No EMI payments recorded.</td></tr>}
       </tbody></table></div>
     </section>
 
     <section className="card form-card finance-section">
-      <div className="finance-section-head"><div><h2>Monthly expenses &amp; savings</h2><p>{year} · {new Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(year, month - 1, 1))}</p></div><div className="finance-record-actions">{editingMonth ? <><button type="button" className="button secondary" onClick={() => void load()} disabled={saving}>Cancel</button><button type="button" onClick={saveMonthly} disabled={saving}>{saving ? 'Saving...' : 'Save monthly finance'}</button></> : <><button type="button" className="button secondary" onClick={() => setEditingMonth(true)} disabled={editingPartnerPayments && isSavedMonth}>Edit month</button><button type="button" className="button secondary finance-delete" onClick={() => { setDeleteError(''); setDeleteTarget({ kind: 'month', label: 'monthly finance record' }); }} disabled={editingPartnerPayments}>Delete month</button></>}</div></div>
+      <div className="finance-section-head"><div><h2>Monthly expenses &amp; savings</h2><p>{year} · {new Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(year, month - 1, 1))}. Enter the full Auto EMI and the friend’s share; only the business share reduces your balance.</p></div><div className="finance-record-actions">{editingMonth ? <><button type="button" className="button secondary" onClick={() => void load()} disabled={saving}>Cancel</button><button type="button" onClick={saveMonthly} disabled={saving}>{saving ? 'Saving...' : 'Save monthly finance'}</button></> : <><button type="button" className="button secondary" onClick={() => setEditingMonth(true)} disabled={editingPartnerPayments && isSavedMonth}>Edit month</button><button type="button" className="button secondary finance-delete" onClick={() => { setDeleteError(''); setDeleteTarget({ kind: 'month', label: 'monthly finance record' }); }} disabled={editingPartnerPayments}>Delete month</button></>}</div></div>
       <div className="finance-grid">
         {editingMonth && <>
           <label>Truck EMI<input type="number" min="0" value={truckEmi} onChange={event => setTruckEmi(Number(event.target.value))} /></label>
           <label>Truck EMI payment date<input type="date" min={periodStart} max={periodEnd} value={truckEmiPaymentDate} onChange={event => setTruckEmiPaymentDate(event.target.value)} /></label>
-          <label>Auto EMI<input type="number" min="0" value={autoEmi} onChange={event => setAutoEmi(Number(event.target.value))} /></label>
+          <label>Full Auto EMI<input type="number" min="0" step="0.01" value={autoEmi} onChange={event => setAutoEmi(Number(event.target.value))} /></label>
+          <label>Friend's auto EMI share<input type="number" min="0" max={autoEmi} step="0.01" value={autoEmiFriendShare} onChange={event => setAutoEmiFriendShare(Number(event.target.value))} /></label>
+          <div className="emi-total-stat"><span>Business auto EMI share</span><strong>{money(autoEmiBusinessShare)}</strong></div>
           <label>Auto EMI payment date<input type="date" min={periodStart} max={periodEnd} value={autoEmiPaymentDate} onChange={event => setAutoEmiPaymentDate(event.target.value)} /></label>
         </>}
         <label>Room rent<input type="number" min="0" disabled={!editingMonth} value={roomRent} onChange={event => setRoomRent(Number(event.target.value))} /></label>
+        <label>Room rent payment date<input type="date" min={periodStart} max={periodEnd} disabled={!editingMonth} value={roomRentPaymentDate} onChange={event => setRoomRentPaymentDate(event.target.value)} /></label>
         <label>Savings deposited<input type="number" min="0" disabled={!editingMonth} value={savingsDeposit} onChange={event => setSavingsDeposit(Number(event.target.value))} /></label>
       </div>
       {editingMonth && <>

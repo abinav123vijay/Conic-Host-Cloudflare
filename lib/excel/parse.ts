@@ -102,7 +102,7 @@ export function parseConicWorkbook(buffer: Buffer, businessId: string) {
       if(!/^\d{4}-\d{2}$/.test(period))return null;
       if(!monthlyFinanceMap.has(period)){
         const [year,month]=period.split('-').map(Number);
-        monthlyFinanceMap.set(period,{businessId,period,year,month,salaries:[],truckEmi:0,autoEmi:0,roomRent:0,savingsDeposit:0,partnerPayments:[]});
+        monthlyFinanceMap.set(period,{businessId,period,year,month,salaries:[],truckEmi:0,autoEmi:0,autoEmiFriendShare:0,roomRent:0,savingsDeposit:0,partnerPayments:[]});
       }
       return monthlyFinanceMap.get(period)!;
     };
@@ -118,7 +118,7 @@ export function parseConicWorkbook(buffer: Buffer, businessId: string) {
         if(month)month.savingsEntries=[...(month.savingsEntries||[]),{date,amount:value,note:String(row?.[7]||'')}];
         continue;
       }
-      if(['Salary','Truck EMI','Auto EMI','Room Rent','Savings Deposit','Partner Payout'].includes(type)){
+      if(['Salary','Truck EMI','Auto EMI','Auto EMI Friend Share','Room Rent','Savings Deposit','Partner Payout'].includes(type)){
         const month=getMonth(dateOrPeriod);if(!month)continue;
         if(type==='Salary'&&name){
           const paidOnline=row?.[10]===null||row?.[10]===undefined?value:toNumber(row[10], `Paid Online on Additional Finance row ${rowNumber}`);
@@ -127,7 +127,8 @@ export function parseConicWorkbook(buffer: Buffer, businessId: string) {
         }
         else if(type==='Truck EMI'){month.truckEmi=value;month.truckEmiPaymentDate=paymentDate;}
         else if(type==='Auto EMI'){month.autoEmi=value;month.autoEmiPaymentDate=paymentDate;}
-        else if(type==='Room Rent')month.roomRent=value;
+        else if(type==='Auto EMI Friend Share')month.autoEmiFriendShare=value;
+        else if(type==='Room Rent'){month.roomRent=value;month.roomRentPaymentDate=paymentDate;}
         else if(type==='Savings Deposit')month.savingsDeposit=value;
         else if(type==='Partner Payout'&&name)month.partnerPayments.push({partner:name,amount:value,paymentDate});
         continue;
@@ -151,6 +152,12 @@ export function parseConicWorkbook(buffer: Buffer, businessId: string) {
         const credit=vendorReturnsMap.get(key);
         if(credit)credit.receipts.push({date,amount:value});
       }
+    }
+  }
+
+  for (const month of monthlyFinanceMap.values()) {
+    if (Number(month.autoEmiFriendShare || 0) > Number(month.autoEmi || 0)) {
+      throw new Error(`Auto EMI friend share cannot exceed the full Auto EMI for ${month.period}.`);
     }
   }
 

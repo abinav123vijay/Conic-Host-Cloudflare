@@ -35,6 +35,7 @@ const finance: FinanceMonth[] = [{
   autoEmi: 50,
   autoEmiPaymentDate: '2026-10-06',
   roomRent: 90,
+  roomRentPaymentDate: '2026-10-31',
   savingsDeposit: 75,
   partnerPayments: []
 }];
@@ -108,6 +109,55 @@ test('salary payments reduce online and cash balances by their recorded split', 
     calculateBalancesThrough('2026-10-03', [], [], { online: 20000, cash: 1000 }, splitSalary),
     { online: 20000, cash: 1000, total: 21000 }
   );
+});
+
+test('auto EMI balance impact uses only the business share and rent uses its payment date', () => {
+  const datedFinance: FinanceMonth[] = [{
+    businessId: 'test',
+    period: '2026-10',
+    year: 2026,
+    month: 10,
+    salaries: [],
+    truckEmi: 21275,
+    truckEmiPaymentDate: '2026-10-10',
+    autoEmi: 8597,
+    autoEmiFriendShare: 4298,
+    autoEmiPaymentDate: '2026-10-10',
+    roomRent: 200,
+    roomRentPaymentDate: '2026-10-15',
+    savingsDeposit: 0,
+    partnerPayments: []
+  }];
+  assert.deepEqual(
+    calculateBalancesThrough('2026-10-09', [], [], { online: 50000, cash: 0 }, datedFinance),
+    { online: 50000, cash: 0, total: 50000 }
+  );
+  assert.deepEqual(
+    calculateBalancesThrough('2026-10-10', [], [], { online: 50000, cash: 0 }, datedFinance),
+    { online: 24426, cash: 0, total: 24426 }
+  );
+  assert.deepEqual(
+    calculateBalancesThrough('2026-10-15', [], [], { online: 50000, cash: 0 }, datedFinance),
+    { online: 24226, cash: 0, total: 24226 }
+  );
+  assert.equal(21275 + 8597 - 4298, 25574);
+});
+
+test('rent without a saved payment date is deducted on the first of its month', () => {
+  const rentWithoutDate: FinanceMonth[] = [{
+    businessId: 'test',
+    period: '2026-10',
+    year: 2026,
+    month: 10,
+    salaries: [],
+    truckEmi: 0,
+    autoEmi: 0,
+    roomRent: 200,
+    savingsDeposit: 0,
+    partnerPayments: []
+  }];
+  assert.equal(calculateBalancesThrough('2026-09-30', [], [], { online: 1000, cash: 0 }, rentWithoutDate).online, 1000);
+  assert.equal(calculateBalancesThrough('2026-10-01', [], [], { online: 1000, cash: 0 }, rentWithoutDate).online, 800);
 });
 
 test('borrowed principal does not increase available balance and vendor refunds increase total only when received', () => {

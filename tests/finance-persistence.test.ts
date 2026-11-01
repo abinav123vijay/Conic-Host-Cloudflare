@@ -59,9 +59,11 @@ test('finance API saves monthly records and retrieves persisted salaries, EMI an
         ],
         truckEmi: 100,
         truckEmiPaymentDate: '2026-10-06',
-        autoEmi: 40,
+        autoEmi: 8597,
+        autoEmiFriendShare: 4298,
         autoEmiPaymentDate: '2026-10-07',
         roomRent: 80,
+        roomRentPaymentDate: '2026-10-09',
         savingsDeposit: 200,
         savingsEntries: [{ date: '2026-10-08', amount: 50, note: 'Additional deposit' }],
         partnerPayments: [{ partner: 'Partner A', amount: 20, paymentDate: '2026-10-09' }]
@@ -82,11 +84,48 @@ test('finance API saves monthly records and retrieves persisted salaries, EMI an
       { person: 'Employee B', amount: 100, paidOnline: 100, paidCash: 0, paymentDate: '2026-10-06' }
     ]);
     assert.equal(result.finance.truckEmi, 100);
-    assert.equal(result.finance.autoEmi, 40);
+    assert.equal(result.finance.autoEmi, 8597);
+    assert.equal(result.finance.autoEmiFriendShare, 4298);
+    assert.equal(result.finance.roomRentPaymentDate, '2026-10-09');
     assert.deepEqual(result.finance.savingsEntries, [
       { date: '2026-10-08', amount: 50, note: 'Additional deposit' }
     ]);
     assert.equal(result.savingsBalance, 230);
+  } finally {
+    restoreDatabase();
+  }
+});
+
+test('finance API rejects an auto EMI friend share larger than the full EMI', async () => {
+  const restoreDatabase = installFinanceDatabase();
+  try {
+    const response = await putFinance(new Request('http://localhost/api/finance', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        period: '2026-10',
+        salaries: [],
+        truckEmi: 0,
+        autoEmi: 100,
+        autoEmiFriendShare: 101,
+        roomRent: 0,
+        savingsDeposit: 0,
+        partnerPayments: []
+      })
+    }));
+    assert.equal(response.status, 400);
+  } finally {
+    restoreDatabase();
+  }
+});
+
+test('finance API defaults rent payment date to the first of the month', async () => {
+  const restoreDatabase = installFinanceDatabase();
+  try {
+    const response = await getFinance(new NextRequest('http://localhost/api/finance?period=2026-10'));
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.finance.roomRentPaymentDate, '2026-10-01');
   } finally {
     restoreDatabase();
   }

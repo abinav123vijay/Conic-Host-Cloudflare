@@ -16,14 +16,17 @@ export function calculateBalancesThrough(
   const purchasesThrough = purchases.filter(purchase => (purchase.paymentDate || purchase.purchaseDate) <= date);
   const financeOutflow = sum(finance.map(entry => {
     const [year, month] = entry.period.split('-').map(Number);
+    const periodStart = `${entry.period}-01`;
     const periodEnd = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
     const datedSalaries = (entry.salaries || []).filter(salary => (salary.paymentDate || periodEnd) <= date);
     const salaryPaymentsOnline = sum(datedSalaries.map(salary => amount(salary.paidOnline ?? salary.amount)));
     const truckEmi = (entry.truckEmiPaymentDate || periodEnd) <= date ? amount(entry.truckEmi) : 0;
-    const autoEmi = (entry.autoEmiPaymentDate || periodEnd) <= date ? amount(entry.autoEmi) : 0;
-    const monthEndOutflows = periodEnd <= date ? amount(entry.roomRent) + amount(entry.savingsDeposit) : 0;
+    const autoEmiBusinessShare = Math.max(0, amount(entry.autoEmi) - amount(entry.autoEmiFriendShare));
+    const autoEmi = (entry.autoEmiPaymentDate || periodEnd) <= date ? autoEmiBusinessShare : 0;
+    const roomRent = (entry.roomRentPaymentDate || periodStart) <= date ? amount(entry.roomRent) : 0;
+    const monthEndOutflows = periodEnd <= date ? amount(entry.savingsDeposit) : 0;
     const datedSavings = sum((entry.savingsEntries || []).filter(item => item.date <= date).map(item => amount(item.amount)));
-    return salaryPaymentsOnline + truckEmi + autoEmi + monthEndOutflows + datedSavings;
+    return salaryPaymentsOnline + truckEmi + autoEmi + roomRent + monthEndOutflows + datedSavings;
   }));
   const salaryCashOutflow = sum(finance.map(entry => {
     const [year, month] = entry.period.split('-').map(Number);
