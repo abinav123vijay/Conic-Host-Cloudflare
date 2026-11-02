@@ -1,4 +1,5 @@
 'use client';
+import '../dashboard-highlights.css';
 import './monthly.css';
 import { useEffect,useState } from 'react';
 import { BarChart,DonutChart,KPI,LineChart,MultiLineChart,StackedMetricChart } from '@/components/Charts';
@@ -58,8 +59,13 @@ export default function MonthlyPage(){
 
  if(!data&&!dashboardError)return <div className="loading">Loading dashboard…</div>;
  if(!data)return <section className="content"><p className="as-of-error" role="alert">{dashboardError}</p></section>;
+ const selectedPeriod=new Date(year,month-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+ const finance=data.financeSummary;
+ const hasMonthlyActivity=data.totalSales>0||data.totalPurchases>0||data.totalExpenses>0||
+  Boolean(finance&&(finance.salaries>0||finance.truckEmi>0||finance.autoEmi>0||finance.roomRent>0||finance.savingsDeposit>0||finance.partnerPayments>0||finance.loanRepayments>0||finance.vendorCreditsReceived>0));
  return <section className="content">
-  <div className="page-head"><div><h1>Monthly Dashboard</h1><p>Monthly totals and closing balances through {monthEndLabel}.</p></div><MonthYear year={year} month={month} onChange={(y,m)=>{setYear(y);setMonth(m)}}/></div>
+  <div className="page-head"><div><h1>Monthly Dashboard</h1><p>Showing <strong>{selectedPeriod}</strong> · Totals and closing balances through {monthEndLabel}.</p></div><MonthYear year={year} month={month} onChange={(y,m)=>{setYear(y);setMonth(m)}}/></div>
+  {!hasMonthlyActivity&&<div className="dashboard-empty-period" role="status">No activity recorded for {selectedPeriod}. Choose another month to view its transactions.</div>}
   <section className="card as-of-card" aria-labelledby="as-of-heading">
    <div className="as-of-heading"><div><h2 id="as-of-heading">Balance as of</h2><p>Calculated from all recorded transactions through the selected date.</p></div><label>Date<input type="date" value={balanceDate} onChange={event=>setBalanceDate(event.target.value)}/></label></div>
    {asOfError&&<p className="as-of-error" role="alert">{asOfError}</p>}

@@ -1,6 +1,7 @@
 'use client';
 
 import './overview.css';
+import '../dashboard/dashboard-highlights.css';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BarChart, DonutChart, DonutChartContent, KPI, LineChart, MultiLineChart, StackedMetricChart } from '@/components/Charts';
@@ -71,12 +72,17 @@ export default function OverviewPage() {
   const financeOutflow = finance
     ? finance.salaries + finance.truckEmi + finance.autoEmi + finance.roomRent + finance.savingsDeposit + finance.loanRepayments
     : 0;
+  const selectedPeriod = new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const hasMonthlyActivity = monthly.totalSales > 0 || monthly.totalPurchases > 0 || monthly.totalExpenses > 0 ||
+    Boolean(finance && (finance.salaries > 0 || finance.truckEmi > 0 || finance.autoEmi > 0 || finance.roomRent > 0 ||
+      finance.savingsDeposit > 0 || finance.partnerPayments > 0 || finance.loanRepayments > 0 || finance.vendorCreditsReceived > 0));
 
   return <section className="content">
     <div className="page-head">
-      <div><h1>Overview</h1><p>Business performance at a glance.</p></div>
+      <div><h1>Overview</h1><p>Showing <strong>{selectedPeriod}</strong> · Business performance at a glance.</p></div>
       <MonthYear year={year} month={month} onChange={(nextYear, nextMonth) => { setYear(nextYear); setMonth(nextMonth); }} />
     </div>
+    {!hasMonthlyActivity && <div className="dashboard-empty-period" role="status">No activity recorded for {selectedPeriod}. Choose another month to view its transactions.</div>}
     {isOwner && <nav className="overview-reconciliation-link" aria-label="Account reconciliation">
       <Link href="/dashboard/reconciliation">Account Reconciliation</Link>
     </nav>}

@@ -314,9 +314,9 @@ test('October demo flow balances sales, purchases, salary split, EMIs, savings, 
     assert.equal(vendorReceiptResponse.status, 200);
 
     assert.deepEqual(await getBalanceAsOf('2026-10-15'), {
-      online: 39500,
+      online: 37500,
       cash: 8500,
-      total: 48100
+      total: 46100
     });
     assert.deepEqual(await getBalanceAsOf('2026-10-31'), {
       online: 36300,

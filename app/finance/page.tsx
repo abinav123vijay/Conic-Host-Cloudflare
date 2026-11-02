@@ -3,6 +3,7 @@
 import './finance.css';
 import './finance-charts.css';
 import './emi-totals.css';
+import './finance-review.css';
 import { Fragment, useEffect, useState } from 'react';
 import { BarChart, DonutChart, KPI, LineChart } from '@/components/Charts';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -60,6 +61,8 @@ export default function FinancePage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   const [deleteError, setDeleteError] = useState('');
+  const [saveReviewOpen, setSaveReviewOpen] = useState(false);
+  const [saveReviewError, setSaveReviewError] = useState('');
   const [error, setError] = useState('');
   const [loanDraft, setLoanDraft] = useState({ person: '', source: 'friend', amountTaken: 0, alreadyRepaid: 0, repaymentDate: today(), takenDate: today(), notes: '' });
   const [returnDraft, setReturnDraft] = useState({ vendor: '', amount: 0, returnDate: today(), notes: '' });
@@ -132,6 +135,7 @@ export default function FinancePage() {
   const saveMonthly = async () => {
     setSaving(true);
     setError('');
+    setSaveReviewError('');
     try {
       const response = await fetch('/api/finance', {
         method: 'PUT',
@@ -141,12 +145,20 @@ export default function FinancePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not save monthly finance.');
       setSavingsBalance(data.savingsBalance);
+      setSaveReviewOpen(false);
       await load();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Could not save monthly finance.');
+      const message = saveError instanceof Error ? saveError.message : 'Could not save monthly finance.';
+      setError(message);
+      setSaveReviewError(message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const requestMonthlySave = () => {
+    setSaveReviewError('');
+    setSaveReviewOpen(true);
   };
 
   const saveEmiTotals = async () => {
@@ -303,7 +315,17 @@ export default function FinancePage() {
   const monthlyOutflow = total([...salaries.map(item => item.amount), truckEmi, autoEmiBusinessShare, roomRent, savingsDepositedThisMonth, loanRepaymentsThisMonth]);
   const monthlyPaymentsTotal = monthlyOutflow - savingsDepositedThisMonth;
   const salaryTotal = total(salaries.map(item => item.amount));
+  const salaryOnlineTotal = total(salaries.map(item => item.paidOnline ?? item.amount));
+  const salaryCashTotal = total(salaries.map(item => item.paidCash ?? 0));
   const partnerPaymentsTotal = total(partnerPayments.map(item => item.amount));
+  const saveReviewDescription = [
+    `${new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} monthly business outflow: ${money(monthlyOutflow)}.`,
+    `Salary: ${money(salaryTotal)} (${money(salaryOnlineTotal)} online + ${money(salaryCashTotal)} cash) · Truck EMI: ${money(truckEmi)}.`,
+    `Auto EMI: ${money(autoEmi)} total; friend pays ${money(autoEmiFriendShare)}; business pays ${money(autoEmiBusinessShare)}.`,
+    `Room rent: ${money(roomRent)} paid on ${roomRentPaymentDate || periodStart}.`,
+    `Savings deposited: ${money(savingsDepositedThisMonth)} · Loan repayments: ${money(loanRepaymentsThisMonth)}.`,
+    `Partner payouts from savings: ${money(partnerPaymentsTotal)} (not included in monthly business outflow).`
+  ].join('\n');
   const loanOutstanding = total(loans.map(loan => loan.outstanding));
   const vendorCreditsPending = total(vendorReturns.map(item => item.pending));
   const vendorCreditsReceivedThisMonth = total(vendorReturns.flatMap(item => (item.receipts || []).filter(receipt => receipt.date >= periodStart && receipt.date <= periodEnd).map(receipt => receipt.amount)));
@@ -368,7 +390,7 @@ export default function FinancePage() {
     </section>
 
     <section className="card form-card finance-section">
-      <div className="finance-section-head"><div><h2>Monthly expenses &amp; savings</h2><p>{year} · {new Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(year, month - 1, 1))}. Enter the full Auto EMI and the friend’s share; only the business share reduces your balance.</p></div><div className="finance-record-actions">{editingMonth ? <><button type="button" className="button secondary" onClick={() => void load()} disabled={saving}>Cancel</button><button type="button" onClick={saveMonthly} disabled={saving}>{saving ? 'Saving...' : 'Save monthly finance'}</button></> : <><button type="button" className="button secondary" onClick={() => setEditingMonth(true)} disabled={editingPartnerPayments && isSavedMonth}>Edit month</button><button type="button" className="button secondary finance-delete" onClick={() => { setDeleteError(''); setDeleteTarget({ kind: 'month', label: 'monthly finance record' }); }} disabled={editingPartnerPayments}>Delete month</button></>}</div></div>
+      <div className="finance-section-head"><div><h2>Monthly expenses &amp; savings</h2><p>{year} · {new Intl.DateTimeFormat('en', { month: 'long' }).format(new Date(year, month - 1, 1))}. Enter the full Auto EMI and the friend’s share; only the business share reduces your balance.</p></div><div className="finance-record-actions">{editingMonth ? <><button type="button" className="button secondary" onClick={() => void load()} disabled={saving}>Cancel</button><button type="button" onClick={requestMonthlySave} disabled={saving}>{saving ? 'Saving...' : 'Save monthly finance'}</button></> : <><button type="button" className="button secondary" onClick={() => setEditingMonth(true)} disabled={editingPartnerPayments && isSavedMonth}>Edit month</button><button type="button" className="button secondary finance-delete" onClick={() => { setDeleteError(''); setDeleteTarget({ kind: 'month', label: 'monthly finance record' }); }} disabled={editingPartnerPayments}>Delete month</button></>}</div></div>
       <div className="finance-grid">
         {editingMonth && <>
           <label>Truck EMI<input type="number" min="0" value={truckEmi} onChange={event => setTruckEmi(Number(event.target.value))} /></label>
@@ -391,7 +413,7 @@ export default function FinancePage() {
         {monthlyPaymentRows.map((item, index) => <tr key={`${item.type}-${item.recipient}-${index}`}><td>{item.date}</td><td>{item.type}</td><td>{item.recipient}</td><td>{money(item.online)}</td><td>{money(item.cash)}</td><td>{money(item.amount)}</td></tr>)}
         {monthlyPaymentRows.length === 0 && <tr><td colSpan={6} className="finance-empty">No payments recorded for this month.</td></tr>}
       </tbody></table></div>
-      {editingMonth && <div className="finance-save-row"><span>Monthly balance reduction: <b>{money(monthlyOutflow)}</b></span><button onClick={saveMonthly} disabled={saving}>{saving ? 'Saving...' : 'Save monthly finance'}</button></div>}
+      {editingMonth && <div className="finance-save-row"><span>Monthly balance reduction: <b>{money(monthlyOutflow)}</b></span><button onClick={requestMonthlySave} disabled={saving}>{saving ? 'Saving...' : 'Save monthly finance'}</button></div>}
     </section>
 
     <section className="card form-card finance-section savings-deposits-section">
@@ -460,7 +482,7 @@ export default function FinancePage() {
     </section>
 
     <section className="card form-card finance-section partner-payout-section">
-      <div className="finance-section-head"><div><h2>Quarterly partner payouts</h2><p>Record payouts once per quarter in a single month. These reduce savings, not monthly operating outflow.</p></div><div className="finance-record-actions">{editingPartnerPayments ? <><button type="button" className="button secondary" onClick={() => void load()} disabled={saving}>Cancel</button><button type="button" onClick={saveMonthly} disabled={saving}>{saving ? 'Saving...' : 'Save payouts'}</button></> : <><button type="button" className="button secondary" onClick={() => setEditingPartnerPayments(true)} disabled={editingMonth && isSavedMonth}>Edit payouts</button>{partnerPayments.length > 0 && <button type="button" className="button secondary finance-delete" onClick={() => { setDeleteError(''); setDeleteTarget({ kind: 'partner-payouts', label: `Q${quarter} ${year} partner payouts` }); }} disabled={editingMonth}>Delete payouts</button>}</>}</div></div>
+      <div className="finance-section-head"><div><h2>Quarterly partner payouts</h2><p>Record payouts once per quarter in a single month. These reduce savings, not monthly operating outflow.</p></div><div className="finance-record-actions">{editingPartnerPayments ? <><button type="button" className="button secondary" onClick={() => void load()} disabled={saving}>Cancel</button><button type="button" onClick={requestMonthlySave} disabled={saving}>{saving ? 'Saving...' : 'Save payouts'}</button></> : <><button type="button" className="button secondary" onClick={() => setEditingPartnerPayments(true)} disabled={editingMonth && isSavedMonth}>Edit payouts</button>{partnerPayments.length > 0 && <button type="button" className="button secondary finance-delete" onClick={() => { setDeleteError(''); setDeleteTarget({ kind: 'partner-payouts', label: `Q${quarter} ${year} partner payouts` }); }} disabled={editingMonth}>Delete payouts</button>}</>}</div></div>
       <div className="finance-payment-heading"><h3>Q{quarter} {year}</h3><span>{money(partnerPaymentsTotal)}</span></div>
       {editingPartnerPayments ? <>
         <div className="finance-list-heading"><span /><button type="button" className="button secondary" onClick={() => setPartnerPayments(items => [...items, { partner: '', amount: 0, paymentDate: monthEndDate(year, month) }])}>+ Add partner payout</button></div>
@@ -472,5 +494,6 @@ export default function FinancePage() {
       </tbody></table></div>}
     </section>
     <ConfirmDialog open={Boolean(deleteTarget)} title="Delete finance record?" description={deleteTarget ? `Delete ${deleteTarget.label}? This action cannot be undone.` : ''} confirmLabel="Delete record" busy={deleting} error={deleteError} onCancel={() => { setDeleteTarget(null); setDeleteError(''); }} onConfirm={() => void deleteRecord()} />
+    <ConfirmDialog open={saveReviewOpen} title="Review monthly finance changes" description={saveReviewDescription} confirmLabel="Confirm and save" busyLabel="Saving..." confirmTone="primary" dialogClassName="finance-review-dialog" busy={saving} error={saveReviewError} onCancel={() => { setSaveReviewOpen(false); setSaveReviewError(''); }} onConfirm={() => void saveMonthly()} />
   </section>;
 }
