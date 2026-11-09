@@ -1,6 +1,14 @@
-node_modules
-.next
+node_modules/
+.next/
+.open-next/
+.wrangler/
+dist/
+build/
+/cloudflare-env.d.ts
 .env
-.env.local
+.env.*
+!.env.example
 *.log
+*.tmp
+*.temp
 .DS_Store

@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "conic-cloudflare-pilot",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "limits": {
+    "cpu_ms": 10
+  },
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "MONGODB_DB": "conic-cloudflare-pilot"
+  }
+}
